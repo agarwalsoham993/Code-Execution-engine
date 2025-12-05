@@ -1,0 +1,17 @@
+python3:
+  image: "python:alpine"
+  cmd: '/bin/sh -c "sleep 0.05; python3 main.py"'
+  filename: "main.py"
+  language: "python"
+
+go:
+  image: "golang:alpine"
+  cmd: '/bin/sh -c "sleep 0.05; go run main.go"'
+  filename: "main.go"
+  language: "go"
+
+node:
+  image: "node:alpine"
+  cmd: '/bin/sh -c "sleep 0.05; node index.js"'
+  filename: "index.js"
+  language: "javascript"

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Local Code Runner</title>
+    <style>
+        body { background-color: #0d0d0d; color: #00ff00; font-family: monospace; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 15px; }
+        select, button, textarea { background: #1a1a1a; color: #00ff00; border: 1px solid #333; padding: 10px; font-family: inherit; }
+        button:hover { background: #333; cursor: pointer; }
+        textarea { min-height: 200px; resize: vertical; outline: none; }
+        .output { background: #000; border: 1px solid #333; padding: 15px; min-height: 150px; white-space: pre-wrap; }
+        .stderr { color: #ff5555; }
+        .stdout { color: #ccc; }
+    </style>
+</head>
+<body>
+    <h1>./runner</h1>
+    <div class="container">
+        <div style="display:flex; gap:10px;">
+            <select id="lang"><option>Loading...</option></select>
+            <button onclick="run()">EXECUTE</button>
+        </div>
+        <textarea id="code" placeholder="// Code here..."></textarea>
+        <div class="output" id="output">Output...</div>
+    </div>
+    <script>
+        const API = "http://localhost:8080/v1";
+        fetch(`${API}/spec`).then(r=>r.json()).then(d=>{
+            const s = document.getElementById('lang'); s.innerHTML='';
+            Object.keys(d).forEach(k=>s.innerHTML+=`<option value="${k}">${k}</option>`);
+        });
+        async function run() {
+            const out = document.getElementById('output');
+            out.innerHTML = '<span class="stdout">Running...</span>';
+            try {
+                const res = await fetch(`${API}/exec`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({
+                        language: document.getElementById('lang').value,
+                        code: document.getElementById('code').value
+                    })
+                });
+                const d = await res.json();
+                out.innerHTML = `<span class="stdout">${d.stdout||''}</span><span class="stderr">${d.stderr||''}</span><br><small>Time: ${d.exectimems}ms</small>`;
+            } catch(e) { out.innerHTML = `<span class="stderr">${e}</span>`; }
+        }
+    </script>
+</body>
+</html>
