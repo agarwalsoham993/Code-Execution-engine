@@ -88,7 +88,7 @@ func (m *Manager) RunInSandbox(req *models.ExecutionRequest, cout, cerr chan []b
 	
 	log.Info().Field("ContainerID", sbx.ID()).Msg("Sandbox cleaned up and resources deleted")
 
-	if timedOut {m
+	if timedOut {
 		return errors.New("execution timed out")
 	}
 
