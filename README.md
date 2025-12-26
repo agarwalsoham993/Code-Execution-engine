@@ -49,6 +49,11 @@ Download the repository and save it as code-engine
 Go: A working Go installation (version 1.21+).
 Docker: Docker Engine must be installed and running in the background.
 
+```{bash}
+sudo apt install golang-go {example for linux ubuntu}
+```
+for installing docker on your operating system follow instructions on -> https://docs.docker.com/engine/install/
+
 ### Get Dependencies:
 Open your terminal in the project's root directory and fetch the required Go modules.
 
@@ -65,8 +70,26 @@ open the directory in terminal and run the following command from there:
 ### Output
 Code Runner Started on port 8080...
 
-### Open the gui by double clicking on index.html
+### Open the gui by opening index.html
 Test the execution engine by inserting your desired code.
+
+### (Optional) Sharing your locally hosted html page online like for local hackathon
+```{bash}
+using Ngrok 
+Login on Ngrok website and obtain authentication ID'S for setting up config file
+Start your server on your local host
+host your server online with -> ngrok http 8080
+It will provide with a sharable local link hosting your primary page and using your server for testing codes
+```
+Ensure CORS service for the API is enabled : In our REST API its already enabled.
+Update the index.html with public ngrok server link 
+```{html}
+const API = "http://localhost:8080/v1";
+            to
+const API = "http://public/provided/link/v1";
+```
+
+Now you can either share the updated file with anyone or we can host that too public using `npx serve` on some other port and host that too online using `ngrok http 5000` 
 
 ### Close the server 
 press Ctrl+C inside the same terminal to soft stop the process instead of abrupt closing of terminal.
