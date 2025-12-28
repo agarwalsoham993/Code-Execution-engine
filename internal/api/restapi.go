@@ -3,7 +3,8 @@ package api
 import (
 	v1 "code-runner/internal/api/v1"
 	"code-runner/internal/config"
-	"code-runner/internal/sandbox"
+	"code-runner/internal/database"
+	"code-runner/internal/queue"
 	"code-runner/internal/spec"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -14,7 +15,7 @@ type RestAPI struct {
 	app         *fiber.App
 }
 
-func NewRestAPI(cfg *config.EnvProvider, sp *spec.BaseProvider, mgr *sandbox.Manager) (*RestAPI, error) {
+func NewRestAPI(cfg *config.EnvProvider, sp *spec.BaseProvider, q *queue.RedisQueue, db *database.PostgresDB) (*RestAPI, error) {
 	r := &RestAPI{
 		bindAddress: cfg.Config().API.BindAddress,
 	}
@@ -23,12 +24,13 @@ func NewRestAPI(cfg *config.EnvProvider, sp *spec.BaseProvider, mgr *sandbox.Man
 		DisableStartupMessage: true,
 	})
 
-	r.app.Use(cors.New(cors.Config{			// ENABLE CORS 
+	r.app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept",
 	}))
 
-	v1.Setup(r.app.Group("/v1"), cfg, sp, mgr)
+	// Pass all dependencies to routes
+	v1.Setup(r.app.Group("/v1"), cfg, sp, q, db)
 
 	return r, nil
 }

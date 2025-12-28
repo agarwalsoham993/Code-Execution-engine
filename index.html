@@ -2,37 +2,215 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Local Code Runner</title>
+    <title>Scalable Code Runner</title>
     <style>
-        body { background-color: #0d0d0d; color: #00ff00; font-family: monospace; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 15px; }
-        select, button, textarea { background: #1a1a1a; color: #00ff00; border: 1px solid #333; padding: 10px; font-family: inherit; }
-        button:hover { background: #333; cursor: pointer; }
-        textarea { min-height: 200px; resize: vertical; outline: none; }
-        .output { background: #000; border: 1px solid #333; padding: 15px; min-height: 150px; white-space: pre-wrap; }
+        :root {
+            --bg-dark: #0d0d0d;
+            --bg-sidebar: #141414;
+            --border: #333;
+            --accent: #00ff00;
+            --text: #e0e0e0;
+        }
+
+        body { 
+            background-color: var(--bg-dark); 
+            color: var(--text); 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            display: flex; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+        
+        /* Layout Structure */
+        .sidebar { 
+            width: 320px; 
+            background: var(--bg-sidebar); 
+            border-right: 1px solid var(--border); 
+            display: flex; 
+            flex-direction: column; 
+            flex-shrink: 0;
+        }
+
+        .main { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden;
+        }
+
+        /* Spacing Fixes */
+        .header-bar {
+            padding: 12px 20px;
+            background: #111;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 15px;
+            overflow-y: auto;
+        }
+        
+        .sidebar-header { 
+            padding: 20px; 
+            border-bottom: 1px solid var(--border); 
+            font-weight: bold; 
+            color: var(--accent);
+            text-transform: uppercase;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-list { overflow-y: auto; flex: 1; }
+        .history-item { 
+            padding: 15px; 
+            border-bottom: 1px solid #222; 
+            cursor: pointer; 
+            transition: background 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .history-item:hover { background: #1a1a1a; }
+        .history-item.active { 
+            background: #1a1a1a; 
+            border-left: 3px solid var(--accent);
+        }
+
+        .badge { font-size: 0.7em; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+        .badge-PENDING { background: #444; color: #fff; }
+        .badge-PROCESSING { background: #0077ff; color: #fff; }
+        .badge-SUCCESS { background: #008800; color: #fff; }
+        .badge-ERROR, .badge-TIMEOUT { background: #880000; color: #fff; }
+
+        .controls { display: flex; gap: 10px; }
+        select, button { 
+            background: #222; 
+            color: var(--accent); 
+            border: 1px solid #444; 
+            padding: 8px 15px; 
+            font-family: inherit;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        button:hover { background: #333; cursor: pointer; border-color: var(--accent); }
+        
+        textarea { 
+            width: 100%; 
+            height: 380px; 
+            background: #050505; 
+            color: #d4d4d4; 
+            border: 1px solid var(--border); 
+            padding: 15px; 
+            resize: none; 
+            outline: none; 
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
+            font-size: 14px;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        .output-box { 
+            background: #000; 
+            border: 1px solid var(--border); 
+            padding: 20px; 
+            min-height: 120px; 
+            white-space: pre-wrap; 
+            font-family: 'Consolas', monospace; 
+            border-radius: 4px;
+            color: #ccc;
+        }
         .stderr { color: #ff5555; }
-        .stdout { color: #ccc; }
+        .meta { 
+            color: #666; 
+            font-size: 0.85em; 
+            margin-top: 10px; 
+            padding-top: 10px; 
+            border-top: 1px solid #222;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(0,255,0,.3);
+            border-radius: 50%;
+            border-top-color: var(--accent);
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <h1>./runner</h1>
-    <div class="container">
-        <div style="display:flex; gap:10px;">
-            <select id="lang"><option>Loading...</option></select>
-            <button onclick="run()">EXECUTE</button>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span>Submissions</span>
+            <button onclick="loadHistory()" style="padding: 2px 8px; font-size: 10px;">Refresh</button>
         </div>
-        <textarea id="code" placeholder="// Code here..."></textarea>
-        <div class="output" id="output">Output...</div>
+        <div class="history-list" id="history">
+            <div style="padding:20px; color:#666;">No attempts found.</div>
+        </div>
     </div>
+
+    <div class="main">
+        <div class="header-bar">
+            <h2 style="margin:0; font-size: 18px; color: var(--accent);">Code runner</h2>
+            <div class="controls">
+                <select id="lang"><option>Loading...</option></select>
+                <button onclick="submitCode()">EXECUTE</button>
+            </div>
+        </div>
+        
+        <div class="editor-container">
+            <textarea id="code" spellcheck="false" placeholder="// Paste code here..."></textarea>
+            
+            <div style="font-weight: bold; font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 1px;">Terminal Output</div>
+            <div class="output-box" id="output">
+                <div style="color:#444">Ready...</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API = "http://localhost:8080/v1";
+        let currentSubmissionId = null;
+        let isProcessing = false;
+
+        // Fetch specs
         fetch(`${API}/spec`).then(r=>r.json()).then(d=>{
             const s = document.getElementById('lang'); s.innerHTML='';
             Object.keys(d).forEach(k=>s.innerHTML+=`<option value="${k}">${k}</option>`);
         });
-        async function run() {
+        
+        // Polling
+        setInterval(loadHistory, 2000);
+        loadHistory();
+
+        function formatTime(dateStr) {
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return "N/A";
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch(e) { return "N/A"; }
+        }
+
+        async function submitCode() {
+            if (isProcessing) return;
+            isProcessing = true;
+
             const out = document.getElementById('output');
-            out.innerHTML = '<span class="stdout">Running...</span>';
+            out.innerHTML = '<div class="spinner"></div>Sending to worker...';
+            
             try {
                 const res = await fetch(`${API}/exec`, {
                     method:'POST',
@@ -43,8 +221,72 @@
                     })
                 });
                 const d = await res.json();
-                out.innerHTML = `<span class="stdout">${d.stdout||''}</span><span class="stderr">${d.stderr||''}</span><br><small>Time: ${d.exectimems}ms</small>`;
-            } catch(e) { out.innerHTML = `<span class="stderr">${e}</span>`; }
+                currentSubmissionId = d.submission_id;
+                out.innerHTML = `<div class="spinner"></div>Running job ${currentSubmissionId}...`;
+                loadHistory(); 
+            } catch(e) { 
+                out.innerHTML = `<div class="stderr">Error: ${e.message}</div>`; 
+                isProcessing = false;
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${API}/submissions`);
+                const data = await res.json();
+                const list = document.getElementById('history');
+                list.innerHTML = '';
+                
+                if (!data || data.length === 0) {
+                    list.innerHTML = '<div style="padding:20px; color:#666;">No submissions.</div>';
+                    return;
+                }
+
+                data.forEach(sub => {
+                    const isActive = currentSubmissionId === sub.id;
+                    const item = document.createElement('div');
+                    item.className = `history-item ${isActive ? 'active' : ''}`;
+                    item.onclick = () => {
+                        currentSubmissionId = null; 
+                        showDetails(sub);
+                    };
+                    
+                    const timeTook = sub.exec_time_ms > 0 ? `• ${sub.exec_time_ms}ms` : '';
+                    
+                    item.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <strong style="color:#fff">${sub.language}</strong>
+                            <span class="badge badge-${sub.status}">${sub.status}</span>
+                        </div>
+                        <div style="font-size:0.75em; color:#666;">
+                            ${formatTime(sub.created_at)} ${timeTook}
+                        </div>
+                    `;
+                    list.appendChild(item);
+
+                    // Auto-update output when job finishes
+                    if (isActive && isProcessing && !['PENDING', 'PROCESSING'].includes(sub.status)) {
+                        isProcessing = false;
+                        showDetails(sub);
+                    }
+                });
+            } catch(e) { console.error("Poll error", e); }
+        }
+
+        function showDetails(sub) {
+            const out = document.getElementById('output');
+            const timeInfo = sub.exec_time_ms > 0 ? `| <strong>Time:</strong> ${sub.exec_time_ms}ms` : '';
+            
+            out.innerHTML = `
+                <div class="stdout">${sub.stdout || ''}</div>
+                <div class="stderr">${sub.stderr || ''}</div>
+                <div class="meta">
+                    <strong>Status:</strong> ${sub.status} ${timeInfo} | 
+                    <strong>ID:</strong> ${sub.id}
+                </div>
+            `;
+            document.getElementById('code').value = sub.code;
+            document.getElementById('lang').value = sub.language;
         }
     </script>
 </body>

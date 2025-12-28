@@ -26,40 +26,57 @@ func NewManager(sb Provider, sp *spec.BaseProvider, fp *file.LocalFileProvider, 
 	return &Manager{sandbox: sb, spec: sp, file: fp, cfg: cfg}, nil
 }
 
-func (m *Manager) RunInSandbox(req *models.ExecutionRequest, cout, cerr chan []byte, cstop chan bool) error {
+func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest, cout, cerr chan []byte, cstop chan bool) error {
 	spc, ok := m.spec.Get(req.Language)
 	if !ok {
 		log.Error().Field("language", req.Language).Msg("Unsupported language specification")
 		return fmt.Errorf("unsupported language: %s", req.Language)
 	}
-	
-	runId := xid.New().String()
+
+	// Use provided ID or generate one
+	runId := submissionID
+	if runId == "" {
+		runId = xid.New().String()
+	}
+
 	log.Debug().Field("RunID", runId).Field("Language", req.Language).Msg("Starting code execution job")
-	
+
 	runSpc := RunSpec{
-		Spec: spc,
-		Subdir: runId,
-		HostDir: m.cfg.Config().HostRootDir,
-		Arguments: req.Arguments,
+		Spec:        spc,
+		Subdir:      runId,
+		HostDir:     m.cfg.Config().HostRootDir,
+		Arguments:   req.Arguments,
 		Environment: req.Environment,
 	}
 
-	if runSpc.Cmd == "" { runSpc.Cmd = spc.FileName }
+	if runSpc.Cmd == "" {
+		runSpc.Cmd = spc.FileName
+	}
 
 	hostDir := runSpc.GetAssembledHostDir()
-	
+
 	m.file.CreateDirectory(hostDir)
 	m.file.CreateFile(path.Join(hostDir, spc.FileName), req.Code)
-	log.Debug().Field("path", hostDir).Msg("Created temp files for sandbox")
+	
+	// Ensure cleanup happens even if container creation fails
+	defer func() {
+		m.file.DeleteDirectory(hostDir)
+	}()
 
 	sbx, err := m.sandbox.CreateSandbox(runSpc)
-	if err != nil { 
+	if err != nil {
 		log.Error().Err(err).Msg("Failed to create Docker sandbox")
-		m.file.DeleteDirectory(hostDir) 
 		return fmt.Errorf("failed to create sandbox: %w", err)
 	}
-	log.Info().Field("ContainerID", sbx.ID()).Msg("Docker container created and started")
+	
+	// Ensure container is cleaned up
+	defer func() {
+		sbx.Kill()
+		sbx.Delete()
+		m.running.Delete(sbx.ID())
+	}()
 
+	log.Info().Field("ContainerID", sbx.ID()).Msg("Docker container created and started")
 	m.running.Store(sbx.ID(), sbx)
 
 	finished := make(chan bool)
@@ -75,18 +92,11 @@ func (m *Manager) RunInSandbox(req *models.ExecutionRequest, cout, cerr chan []b
 	case <-finished:
 		log.Debug().Field("ContainerID", sbx.ID()).Msg("Sandbox finished execution")
 	case <-time.After(time.Duration(m.cfg.Config().Sandbox.TimeoutSeconds) * time.Second):
-		log.Warn().Field("ContainerID", sbx.ID()).Msg("Sandbox timed out. Killing container.")
-		sbx.Kill()
+		log.Warn().Field("ContainerID", sbx.ID()).Msg("Sandbox timed out.")
 		timedOut = true
 	}
 
-	cstop <- true //singal
-	
-	sbx.Delete()
-	m.file.DeleteDirectory(hostDir)
-	m.running.Delete(sbx.ID())
-	
-	log.Info().Field("ContainerID", sbx.ID()).Msg("Sandbox cleaned up and resources deleted")
+	cstop <- true // signal to stop collection
 
 	if timedOut {
 		return errors.New("execution timed out")

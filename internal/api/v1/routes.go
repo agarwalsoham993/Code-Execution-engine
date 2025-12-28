@@ -2,53 +2,58 @@ package v1
 
 import (
 	"code-runner/internal/config"
-	"code-runner/internal/sandbox"
+	"code-runner/internal/database"
+	"code-runner/internal/queue"
 	"code-runner/internal/spec"
-	"code-runner/internal/util"
-	"code-runner/pkg/cappedbuffer"
 	"code-runner/pkg/models"
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/xid"
 )
 
-func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, mgr *sandbox.Manager) {
+func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, q *queue.RedisQueue, db *database.PostgresDB) {
+	
 	router.Get("/spec", func(c *fiber.Ctx) error {
 		return c.JSON(sp.Spec())
 	})
 
+	// Get History
+	router.Get("/submissions", func(c *fiber.Ctx) error {
+		subs, err := db.GetAllSubmissions()
+		if err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
+		}
+		return c.JSON(subs)
+	})
+
+	// Submit Code
 	router.Post("/exec", func(c *fiber.Ctx) error {
 		req := new(models.ExecutionRequest)
 		if err := c.BodyParser(req); err != nil {
 			return c.Status(400).JSON(models.ErrorModel{Error: "Invalid JSON"})
 		}
 
-		cStdOut := make(chan []byte)
-		cStdErr := make(chan []byte)
-		cStop := make(chan bool, 1)
+		// 1. Generate ID
+		id := xid.New().String()
 
-		stdOut := cappedbuffer.New([]byte{}, 1024*1024) // 1MB limit
-		stdErr := cappedbuffer.New([]byte{}, 1024*1024)
+		// 2. Save to DB (PENDING)
+		sub := &models.Submission{
+			ID:       id,
+			Language: req.Language,
+			Code:     req.Code,
+			Status:   "PENDING",
+		}
+		if err := db.CreateSubmission(sub); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: "Database Error"})
+		}
 
-		go func() {
-			for {
-				select {
-				case <-cStop:
-					return
-				case p := <-cStdOut:
-					stdOut.Write(p)
-				case p := <-cStdErr:
-					stdErr.Write(p)
-				}
-			}
-		}()
-
-		execTime := util.MeasureTime(func() {
-			mgr.RunInSandbox(req, cStdOut, cStdErr, cStop)
-		})
+		// 3. Push to Redis
+		if err := q.Enqueue(id); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: "Queue Error"})
+		}
 
 		return c.JSON(models.ExecutionResponse{
-			StdOut:     stdOut.String(),
-			StdErr:     stdErr.String(),
-			ExecTimeMS: int(execTime.Milliseconds()),
+			SubmissionID: id,
+			Status:       "PENDING",
 		})
 	})
 }
