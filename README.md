@@ -8,6 +8,8 @@ The engine provides a reliable sandboxing solution for running arbitrary code, u
 
 The engine operates on a client-server model. The API server (using Fiber since GOlang but RESTful) receives an execution request and hands it off to the Sandbox Manager, which orchestrates the entire Docker container lifecycle—from creation to code execution, timeout monitoring, and final cleanup.
 
+<img width="1000" height="737" alt="image" src="https://github.com/user-attachments/assets/b8216eba-7663-4418-a86c-9f47782ad3ea" />
+
 ## Key Files:
 
 `cmd/main.go` : Initializes all components (Config, Specs, Docker Provider) and starts the API server (:8080).
@@ -43,8 +45,6 @@ RUNNER_SANDBOX_MEMORY=100M       # Increase memory limit for larger jobs
 
 ## Execution directions
 
-Download the repository and save it as code-engine
-
 ### Prerequisites Check
 Go: A working Go installation (version 1.21+).
 Docker: Docker Engine must be installed and running in the background.
@@ -54,12 +54,57 @@ sudo apt install golang-go {example for linux ubuntu}
 ```
 for installing docker on your operating system follow instructions on -> https://docs.docker.com/engine/install/
 
-### Get Dependencies:
+### 1.Start infrastructure:
+We need Redis (for the queue) and PostgreSQL (for the database) running.
+Run this command in the project root:
+
+```{bash}
+docker-compose up -d
+```
+
+This will start the database on port 5432 and Redis on port 6379.
+
+### 2.Configure Environment
+
+Ensure you have the .env file created in the root directory.
+In the current system there is no private password created for the in-docker postgres(mysecretpassword)
+If you changed the password in docker-compose.yaml, make sure to update RUNNER_DB_DSN in the .env file.
+
+### 3.Pull Language Images
+
+Pre-Pull docker images  manually to save time on the first run:
+```{bash}
+docker pull python:alpine
+docker pull node:alpine
+docker pull golang:alpine
+```
+
+### 4.(Optional) Monitor REDIS and PostgresDB
+In a NEW TERMINAL WINDOW (inside same directory)
+check redis and postgres are running inside docker with `docker ps` in bash
+<img width="1145" height="58" alt="image" src="https://github.com/user-attachments/assets/1b6f2bec-e743-4e72-a643-9c9e18110716" />
+
+#### Turn on REDIS CLI 
+`docker exec -it runner_queue redis-cli`
+
+Type `MONITOR` inside bash , Live updates in REDIS server are logged.
+
+#### Turn on the Postgres CLI in a NEW terminal window
+`docker exec -it runner_db psql -U postgres -d runner`
+Turns on the docker contained posgres CLI , type in `\dt` for viewing all the available databases inside.
+
+<img width="309" height="110" alt="image" src="https://github.com/user-attachments/assets/5b583f39-c02a-41f3-bc2e-c88ca575b27b" />
+
+Now type in `SELECT * FROM {name of the database}submissions;` for viewing the contents of the database
+
+<img width="1467" height="137" alt="image" src="https://github.com/user-attachments/assets/8bc66cb8-b478-41c8-bcd7-cd7bc3f25ba7" />
+
+### 5.Get Dependencies installed:
 Open your terminal in the project's root directory and fetch the required Go modules.
 
 `go mod tidy`
 
-### Start the Server:
+### 6.Start the Server:
 Run the main application file. The server will automatically load any settings from a local .env file or use defaults, and start listening on (eg : http://localhost:8080.)
 
 open the directory in terminal and run the following command from there:
@@ -68,12 +113,20 @@ open the directory in terminal and run the following command from there:
 
 
 ### Output
-Code Runner Started on port 8080...
+```
+INFO Connected to Postgres
+INFO Connected to Redis
+INFO Code Runner Started on port :8080 with 3 workers...
+INFO Worker started, waiting for jobs... worker_id=1
+INFO Worker started, waiting for jobs... worker_id=2
+INFO Worker started, waiting for jobs... worker_id=3
+```
 
-### Open the gui by opening index.html
+### Interact as a user by opening index.html
 Test the execution engine by inserting your desired code.
+<img width="1844" height="823" alt="Screenshot from 2025-12-28 11-13-00" src="https://github.com/user-attachments/assets/b0eec81d-bf28-487d-bace-de0f2909a723" />
 
-### (Optional) Sharing your locally hosted html page online like for local hackathon
+### 7.(Optional) Sharing your locally hosted html page online like for local hackathon
 ```{bash}
 using Ngrok 
 Login on Ngrok website and obtain authentication ID'S for setting up config file
@@ -82,6 +135,7 @@ host your server online with -> ngrok http 8080
 It will provide with a sharable local link hosting your primary page and using your server for testing codes
 ```
 Ensure CORS service for the API is enabled : In our REST API its already enabled.
+
 Update the index.html with public ngrok server link 
 ```{html}
 const API = "http://localhost:8080/v1";
@@ -91,5 +145,7 @@ const API = "http://public/provided/link/v1";
 
 Now you can either share the updated file with anyone or we can host that too public using `npx serve` on some other port and host that too online using `ngrok http 5000` 
 
-### Close the server 
+### 8.Close the server 
 press Ctrl+C inside the same terminal to soft stop the process instead of abrupt closing of terminal.
+
+close the dockerized postgres and redis ->`docker-compose down`
