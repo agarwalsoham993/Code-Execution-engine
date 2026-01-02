@@ -122,28 +122,20 @@ INFO Worker started, waiting for jobs... worker_id=2
 INFO Worker started, waiting for jobs... worker_id=3
 ```
 
-### Interact as a user by opening index.html
+### Interact as a user by going to http://localhost:8080 on supported browser 
 Test the execution engine by inserting your desired code.
 <img width="1844" height="823" alt="Screenshot from 2025-12-28 11-13-00" src="https://github.com/user-attachments/assets/b0eec81d-bf28-487d-bace-de0f2909a723" />
 
 ### 7.(Optional) Sharing your locally hosted html page online like for local hackathon
 ```{bash}
 using Ngrok 
-Login on Ngrok website and obtain authentication ID'S for setting up config file
-Start your server on your local host
+1. Login on Ngrok website and obtain authentication ID'S for setting up config file
+2. Setup authentication detail in the laptop's own config file where NGROK was downloaded
+3.Start your server on your local host
 host your server online with -> ngrok http 8080
 It will provide with a sharable local link hosting your primary page and using your server for testing codes
 ```
 Ensure CORS service for the API is enabled : In our REST API its already enabled.
-
-Update the index.html with public ngrok server link 
-```{html}
-const API = "http://localhost:8080/v1";
-            to
-const API = "http://public/provided/link/v1";
-```
-
-Now you can either share the updated file with anyone or we can host that too public using `npx serve` on some other port and host that too online using `ngrok http 5000` 
 
 ### 8.Close the server 
 press Ctrl+C inside the same terminal to soft stop the process instead of abrupt closing of terminal.
