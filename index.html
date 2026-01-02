@@ -22,7 +22,6 @@
             overflow: hidden; 
         }
         
-        /* Three Columns: History | Main Editor | Questions */
         .sidebar { 
             width: 280px; 
             background: var(--bg-sidebar); 
@@ -61,8 +60,8 @@
             background: #1a1a1a;
             padding: 15px;
             border-bottom: 1px solid var(--border);
-            min-height: 60px;
-            max-height: 150px;
+            min-height: 100px;
+            max-height: 200px;
             overflow-y: auto;
         }
 
@@ -188,6 +187,7 @@
             color: #eee;
             border-radius: 8px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            font-family: 'Consolas', monospace;
         }
 
         .close {
@@ -209,11 +209,12 @@
             background-color: #aa0000;
             color: white;
             border: none;
-            padding: 5px 10px;
+            padding: 8px 15px;
             margin-top: 10px;
             cursor: pointer;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: bold;
         }
         .btn-wrong-case:hover {
             background-color: #cc0000;
@@ -222,16 +223,16 @@
 </head>
 <body>
 
-    <!-- Modal -->
+    <!-- view error button -->
     <div id="errorModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal()">&times;</span>
-            <h3 style="margin-top:0; color: var(--accent);">Failed Test Case Details</h3>
-            <pre id="modalText" style="background:#000; padding:15px; border-radius:4px; border:1px solid #333; overflow:auto;"></pre>
+            <h3 style="margin-top:0; color: #ff5555;">Failed Test Case Details</h3>
+            <pre id="modalText" style="white-space: pre-wrap; font-size: 14px; color: #ccc;"></pre>
         </div>
     </div>
 
-    <!-- Left: Submissions -->
+    <!-- Submissions Panel -->
     <div class="sidebar">
         <div class="sidebar-header">
             <span>Submissions</span>
@@ -242,7 +243,7 @@
         </div>
     </div>
 
-    <!-- Center: Editor -->
+    <!-- code editor -->
     <div class="main">
         <div class="header-bar">
             <h2 style="margin:0; font-size: 18px; color: var(--accent);">Solver</h2>
@@ -266,7 +267,7 @@
         </div>
     </div>
 
-    <!-- Right: Questions -->
+    <!-- Questions Panel -->
     <div class="right-panel">
         <div class="sidebar-header">Questions</div>
         <div class="list-container" id="questions">
@@ -275,18 +276,16 @@
     </div>
 
     <script>
-        const API = "http://localhost:8080/v1";
+        const API = "/v1";                      // path is relative now, as we are hosting the index page itself on the main pipeline.
+        
         let currentSubmissionId = null;
         let selectedQuestionId = "";
         let isProcessing = false;
 
-        // Init
         fetchSpecs();
         fetchQuestions();
-        setInterval(loadHistory, 2000);
-        loadHistory();
+        loadHistory(); 
 
-        // Modal Logic
         function closeModal() {
             document.getElementById('errorModal').style.display = 'none';
         }
@@ -324,19 +323,17 @@
         }
 
         async function loadQuestion(id, el) {
-            // UI Toggle
             document.querySelectorAll('#questions .list-item').forEach(e=>e.classList.remove('active'));
             if(el) el.classList.add('active');
             
             selectedQuestionId = id;
             
-            // Fetch Details
             try {
                 const res = await fetch(`${API}/questions/${id}`);
                 const data = await res.json();
                 document.getElementById('question-box').innerHTML = `
-                    <strong style="color:white; display:block; margin-bottom:5px;">Problem ${data.id}</strong>
-                    <div style="white-space: pre-wrap; font-size: 0.9em;">${data.description}</div>
+                    <strong style="color:white; display:block; margin-bottom:5px;">Problem ${data.id}: ${data.title}</strong>
+                    <div style="white-space: pre-wrap; font-size: 0.9em; line-height: 1.5; color: #ddd;">${data.description}</div>
                 `;
             } catch(e) {
                 document.getElementById('question-box').innerHTML = '<div style="color:red">Failed to load question</div>';
@@ -345,10 +342,14 @@
 
         async function submitCode() {
             if (isProcessing) return;
+            if (!selectedQuestionId) {
+                alert("Please select a question first.");
+                return;
+            }
             isProcessing = true;
 
             const out = document.getElementById('output');
-            out.innerHTML = '<div class="spinner"></div>Submitting...';
+            out.innerHTML = '<div class="spinner"></div>Sending...';
             
             try {
                 const res = await fetch(`${API}/exec`, {
@@ -362,8 +363,10 @@
                 });
                 const d = await res.json();
                 currentSubmissionId = d.submission_id;
-                out.innerHTML = `<div class="spinner"></div>Processing ID: ${currentSubmissionId}...`;
-                loadHistory(); 
+                
+                out.innerHTML = `<div style="color: #0077ff;">Submitted. ID: ${currentSubmissionId}</div><div style="color:#666; margin-top:5px;">Click 'Refresh' in the sidebar to check status.</div>`;
+                isProcessing = false;
+                
             } catch(e) { 
                 out.innerHTML = `<div class="stderr">Error: ${e.message}</div>`; 
                 isProcessing = false;
@@ -391,11 +394,6 @@
                         showDetails(sub);
                     };
                     
-                    let meta = '';
-                    if (sub.question_id) {
-                         meta = `<br><span style="color:#888; font-size:0.9em;">Q: ${sub.question_id}</span>`;
-                    }
-                    
                     item.innerHTML = `
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
                             <strong style="color:#fff">${sub.language}</strong>
@@ -403,36 +401,35 @@
                         </div>
                         <div style="font-size:0.75em; color:#666;">
                             ${new Date(sub.created_at).toLocaleTimeString()} 
-                            ${meta}
                         </div>
                     `;
                     list.appendChild(item);
-
-                    if (isActive && isProcessing && !['PENDING', 'PROCESSING'].includes(sub.status)) {
-                        isProcessing = false;
-                        showDetails(sub);
-                    }
                 });
             } catch(e) { console.error("Poll error", e); }
         }
 
         function showDetails(sub) {
             const out = document.getElementById('output');
+            let content = '';
             
-            // Format Stats
-            let stats = '';
-            if (sub.question_id) {
-                stats = `<div style="margin-top:10px; padding:10px; background:#111; border:1px solid #333; border-radius:4px;"><div><strong>Passed:</strong> ${sub.passed_count}/${sub.total_count}</div><div><strong>Memory:</strong> ${sub.memory_used || 'N/A'}</div></div>`;
+            if (sub.status === 'SUCCESS') {
+                content = `<div style="color: #00ff00; font-size: 1.2em; font-weight: bold;">All Test Cases Passed</div><div style="color:#888; margin-top:5px;">Passed: ${sub.passed_count}/${sub.total_count}</div>`;
+            } else if (sub.status === 'FAILURE') {
+                content = `<div style="color: #ff5555; font-size: 1.2em; font-weight: bold; margin-bottom: 10px;">Test Case Failed</div><div style="color:#888;">Passed: ${sub.passed_count}/${sub.total_count}</div><button id="btnViewWrong" class="btn-wrong-case">View Failed Test Case</button>`;
+            } else if (sub.status === 'ERROR') {
+                 content = `<div class="stderr">Runtime Error: ${sub.stderr}</div>`;
+            } else if (sub.status === 'PENDING') {
+                 content = `<div style="color: #0077ff;">Status: Pending...</div>`;
+            } else {
+                 content = `<div style="color:#ccc;">Status: ${sub.status}</div>`;
             }
 
-            // Concatenating strings to avoid indentation issues with white-space: pre-wrap
-            out.innerHTML = `<div class="stdout" style="font-size: 1.1em; color: ${sub.status === 'SUCCESS' ? '#0f0' : (sub.status === 'FAILURE' ? '#f00' : '#ccc')}">${sub.stdout || ''}</div>` +
-                (sub.status === 'FAILURE' ? '<button id="btnViewWrong" class="btn-wrong-case">View Wrong Test Case</button>' : '') +
-                `<div class="stderr">${sub.status === 'ERROR' ? sub.stderr : ''}</div>` +
-                stats +
-                `<div class="meta"><span>${sub.status} | ${sub.exec_time_ms}ms</span><span>ID: ${sub.id}</span></div>`;
+            out.innerHTML = content + 
+                            `<div class="meta" style="margin-top:20px;">
+                                <span>${sub.exec_time_ms}ms</span>
+                                <span>ID: ${sub.id}</span>
+                             </div>`;
             
-            // Attach click handler for the button if it exists
             const btn = document.getElementById('btnViewWrong');
             if (btn) {
                 btn.onclick = () => {

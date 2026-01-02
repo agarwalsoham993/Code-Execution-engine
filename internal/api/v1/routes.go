@@ -3,38 +3,63 @@ package v1
 import (
 	"code-runner/internal/config"
 	"code-runner/internal/database"
-	"code-runner/internal/question"
 	"code-runner/internal/queue"
 	"code-runner/internal/spec"
 	"code-runner/pkg/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/xid"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
-// Updated Setup signature to accept QuestionProvider
-func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, q *queue.RedisQueue, db *database.PostgresDB, qp *question.Provider) {
+func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, q *queue.RedisQueue, db *database.PostgresDB) {
 	
 	router.Get("/spec", func(c *fiber.Ctx) error {
 		return c.JSON(sp.Spec())
 	})
 
-	// List Questions
 	router.Get("/questions", func(c *fiber.Ctx) error {
-		qs, err := qp.ListQuestions()
+		entries, err := os.ReadDir("Questions")
 		if err != nil {
-			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
+			return c.JSON([]models.Question{})
 		}
-		return c.JSON(qs)
+		var questions []models.Question
+		for _, e := range entries {
+			if e.IsDir() {
+				title := "Unknown"
+				data, _ := os.ReadFile(filepath.Join("Questions", e.Name(), "question.txt"))
+				lines := strings.Split(string(data), "\n")
+				if len(lines) > 0 {
+					title = lines[0]
+				}
+				questions = append(questions, models.Question{ID: e.Name(), Title: title})
+			}
+		}
+		return c.JSON(questions)
 	})
 
-	// Get Question Details
 	router.Get("/questions/:id", func(c *fiber.Ctx) error {
-		q, err := qp.GetQuestion(c.Params("id"))
+		id := c.Params("id")
+		path := filepath.Join("Questions", id, "question.txt")
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return c.Status(404).JSON(models.ErrorModel{Error: "Question not found"})
 		}
-		return c.JSON(q)
+		
+		content := string(data)
+		parts := strings.SplitN(content, "\n", 2)
+		title := parts[0]
+		desc := ""
+		if len(parts) > 1 { desc = parts[1] }
+
+		return c.JSON(models.Question{
+			ID:          id,
+			Title:       title,
+			Description: desc,
+		})
 	})
+
 
 	router.Get("/submissions", func(c *fiber.Ctx) error {
 		subs, err := db.GetAllSubmissions()
@@ -59,11 +84,19 @@ func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, 
 			QuestionID: req.QuestionID,
 			Status:     "PENDING",
 		}
+
 		if err := db.CreateSubmission(sub); err != nil {
 			return c.Status(500).JSON(models.ErrorModel{Error: "Database Error"})
 		}
 
-		if err := q.Enqueue(id); err != nil {
+		payload := models.JobPayload{
+			SubmissionID: id,
+			Language:     req.Language,
+			Code:         req.Code,
+			QuestionID:   req.QuestionID,
+		}
+
+		if err := q.Enqueue(payload); err != nil {
 			return c.Status(500).JSON(models.ErrorModel{Error: "Queue Error"})
 		}
 

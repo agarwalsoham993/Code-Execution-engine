@@ -1,17 +1,17 @@
 python3:
   image: "python:alpine"
-  cmd: '/bin/sh -c "sleep 0.05; python3 main.py"'
-  filename: "main.py"
+  cmd: '/bin/sh -c "python3 driver.py"'
+  filename: "driver.py"
   language: "python"
-
-go:
-  image: "golang:alpine"
-  cmd: '/bin/sh -c "sleep 0.05; go run main.go"'
-  filename: "main.go"
-  language: "go"
 
 node:
   image: "node:alpine"
-  cmd: '/bin/sh -c "sleep 0.05; node index.js"'
-  filename: "index.js"
+  cmd: '/bin/sh -c "node driver.js"'
+  filename: "driver.js"
   language: "javascript"
+
+go:
+  image: "golang:alpine"
+  cmd: '/bin/sh -c "go run main.go"'
+  filename: "main.go"
+  language: "go"

@@ -22,7 +22,10 @@ type Config struct {
 	Database struct {
 		DSN string
 	}
-	WorkerCount int
+	Worker struct {
+		Min int
+		Max int
+	}
 }
 
 type EnvProvider struct {
@@ -44,10 +47,10 @@ func (ep *EnvProvider) Load() error {
 	ep.c.Redis.Addr = getEnv(ep.prefix+"REDIS_ADDR", "localhost:6379")
 	ep.c.Redis.Pwd = getEnv(ep.prefix+"REDIS_PWD", "")
 	
-	// Default to local postgres container
 	ep.c.Database.DSN = getEnv(ep.prefix+"DB_DSN", "postgres://postgres:postgres@localhost:5432/runner?sslmode=disable")
 	
-	ep.c.WorkerCount, _ = strconv.Atoi(getEnv(ep.prefix+"WORKER_COUNT", "3"))
+	ep.c.Worker.Min, _ = strconv.Atoi(getEnv(ep.prefix+"WORKER_MIN", "1"))
+	ep.c.Worker.Max, _ = strconv.Atoi(getEnv(ep.prefix+"WORKER_MAX", "6"))
 
 	return nil
 }

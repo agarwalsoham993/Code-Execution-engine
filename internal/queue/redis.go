@@ -1,8 +1,11 @@
 package queue
 
 import (
+	"code-runner/pkg/models"
 	"context"
+	"encoding/json"
 	"github.com/redis/go-redis/v9"
+	"time"
 )
 
 type RedisQueue struct {
@@ -24,16 +27,27 @@ func NewRedisQueue(addr, pwd string) *RedisQueue {
 	}
 }
 
-func (q *RedisQueue) Enqueue(submissionID string) error {
-	return q.client.RPush(q.ctx, q.key, submissionID).Err()
+func (q *RedisQueue) Enqueue(payload models.JobPayload) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return q.client.RPush(q.ctx, q.key, data).Err()
 }
 
-func (q *RedisQueue) Dequeue() (string, error) {
-	// Blocking pop with 0 timeout (wait forever)
-	res, err := q.client.BLPop(q.ctx, 0, q.key).Result()
+func (q *RedisQueue) Dequeue(timeout time.Duration) (*models.JobPayload, error) {
+	res, err := q.client.BLPop(q.ctx, timeout, q.key).Result()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	// BLPop returns [key, value]
-	return res[1], nil
+	// res[0] is key, res[1] is value
+	payload := new(models.JobPayload)
+	if err := json.Unmarshal([]byte(res[1]), payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (q *RedisQueue) Length() (int64, error) {
+	return q.client.LLen(q.ctx, q.key).Result()
 }

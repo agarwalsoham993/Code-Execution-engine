@@ -2,165 +2,244 @@ package worker
 
 import (
 	"code-runner/internal/database"
-	"code-runner/internal/question"
 	"code-runner/internal/queue"
 	"code-runner/internal/sandbox"
 	"code-runner/internal/util"
 	"code-runner/pkg/cappedbuffer"
 	"code-runner/pkg/models"
+	"encoding/json"
 	"fmt"
-	"github.com/zekrotja/rogu/log"
-	"strings"
+	"os"
+	"path/filepath"
+	"strconv"
 	"time"
+	"github.com/redis/go-redis/v9"
+	"github.com/zekrotja/rogu/log"
 )
 
 type Worker struct {
-	id       int
-	queue    *queue.RedisQueue
-	db       *database.PostgresDB
-	manager  *sandbox.Manager
-	qProvider *question.Provider
+	id      int
+	queue   *queue.RedisQueue
+	db      *database.PostgresDB
+	manager *sandbox.Manager
+	quit    chan bool
 }
 
-func NewWorker(id int, q *queue.RedisQueue, db *database.PostgresDB, mgr *sandbox.Manager, qp *question.Provider) *Worker {
-	return &Worker{id: id, queue: q, db: db, manager: mgr, qProvider: qp}
+func NewWorker(id int, q *queue.RedisQueue, db *database.PostgresDB, mgr *sandbox.Manager) *Worker {
+	return &Worker{
+		id:      id,
+		queue:   q,
+		db:      db,
+		manager: mgr,
+		quit:    make(chan bool),
+	}
+}
+
+// Stop signals the worker to finish the current loop and exit
+func (w *Worker) Stop() {
+	go func() {
+		w.quit <- true
+	}()
 }
 
 func (w *Worker) Start() {
-	log.Info().Field("worker_id", w.id).Msg("Worker started, waiting for jobs...")
+	log.Info().Field("worker_id", w.id).Msg("Worker started")
+	
 	for {
-		submissionID, err := w.queue.Dequeue()
+		// Check for stop signal before polling
+		select {
+		case <-w.quit:
+			log.Info().Field("worker_id", w.id).Msg("Worker stopping (signal received)")
+			return
+		default:
+		}
+ 
+		payload, err := w.queue.Dequeue(2 * time.Second)
 		if err != nil {
-			log.Error().Err(err).Msg("Redis error")
-			continue
-		}
-
-		log.Info().Field("worker_id", w.id).Field("job_id", submissionID).Msg("Processing job")
-
-		sub, err := w.db.GetSubmission(submissionID)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to get submission from DB")
-			continue
-		}
-
-		w.db.UpdateResult(submissionID, "PROCESSING", "", "", 0, 0, 0, "")
-
-		req := &models.ExecutionRequest{
-			Language:   sub.Language,
-			Code:       sub.Code,
-			QuestionID: sub.QuestionID,
-		}
-
-		// Determine inputs: If question ID exists, fetch test cases. Otherwise single run (playground).
-		var testCases []question.TestCase
-		if req.QuestionID != "" {
-			testCases, err = w.qProvider.GetTestCases(req.QuestionID)
-			if err != nil {
-				w.db.UpdateResult(submissionID, "ERROR", "", fmt.Sprintf("Failed to load question: %v", err), 0, 0, 0, "")
+			if err == redis.Nil {
 				continue
 			}
-		} else {
-			// Playground mode: 1 empty test case
-			testCases = []question.TestCase{{ID: "1", Input: "", Expected: ""}}
+			log.Error().Err(err).Msg("Redis error")
+			time.Sleep(1 * time.Second) // Backoff on error
+			continue
 		}
 
-		totalTests := len(testCases)
-		passedTests := 0
-		finalStatus := "SUCCESS"
-		var finalStdOut, finalStdErr strings.Builder
-		totalTime := 0
+		log.Info().Field("worker_id", w.id).Field("job_id", payload.SubmissionID).Msg("Processing job")
 
-		for _, tc := range testCases {
-			cStdOut := make(chan []byte)
-			cStdErr := make(chan []byte)
-			cStop := make(chan bool, 1)
+		files, totalTestCases, err := w.generateFiles(payload)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to generate files")
+			w.db.UpdateResult(payload.SubmissionID, "ERROR", "", "Failed to generate runner: "+err.Error(), 0, 0, 0)
+			continue
+		}
 
-			stdOutBuf := cappedbuffer.New([]byte{}, 1024*1024)
-			stdErrBuf := cappedbuffer.New([]byte{}, 1024*1024)
+		cStdOut := make(chan []byte)
+		cStdErr := make(chan []byte)
+		cStop := make(chan bool, 1)
 
-			go func() {
-				for {
-					select {
-					case <-cStop:
-						return
-					case p := <-cStdOut:
-						stdOutBuf.Write(p)
-					case p := <-cStdErr:
-						stdErrBuf.Write(p)
-					}
+		stdOutBuf := cappedbuffer.New([]byte{}, 10*1024) 
+		stdErrBuf := cappedbuffer.New([]byte{}, 10*1024)
+
+		go func() {
+			for {
+				select {
+				case <-cStop:
+					return
+				case p := <-cStdOut:
+					stdOutBuf.Write(p)
+				case p := <-cStdErr:
+					stdErrBuf.Write(p)
 				}
-			}()
-
-			var execTime time.Duration
-			execTime = util.MeasureTime(func() {
-				// Pass Test Case Input here
-				err = w.manager.RunInSandbox(submissionID, req, []byte(tc.Input), cStdOut, cStdErr, cStop)
-			})
-			totalTime += int(execTime.Milliseconds())
-
-			// Check runtime/compile error
-			if err != nil {
-				finalStatus = "ERROR"
-				if err.Error() == "execution timed out" {
-					finalStatus = "TIMEOUT"
-				}
-				
-				// Reset buffers to ensure we only show the relevant error
-				finalStdErr.Reset()
-				finalStdErr.WriteString(fmt.Sprintf("Error on Test Case %s: %v\n%s\n", tc.ID, err, stdErrBuf.String()))
-				
-				finalStdOut.Reset()
-				finalStdOut.WriteString("Runtime/Compilation Error")
-				break // Stop on first fatal error
 			}
+		}()
 
-			runOut := strings.TrimSpace(stdOutBuf.String())
-			
-			// Verify logic (only if not playground)
-			if req.QuestionID != "" {
-				expected := strings.TrimSpace(tc.Expected)
-				if runOut == expected {
-					passedTests++
-				} else {
-					finalStatus = "FAILURE"
-					
-					// User Requirement: Only show the failed test case number in main message
-					finalStdOut.Reset()
-					finalStdOut.WriteString(fmt.Sprintf("Failed Test case %s", tc.ID))
+		execTime := util.MeasureTime(func() {
+			err = w.manager.RunInSandbox(payload.SubmissionID, payload.Language, files, nil, cStdOut, cStdErr, cStop)
+		})
 
-					// User Requirement: Details for the "view wrong test case" button (stored in StdErr)
-					finalStdErr.Reset()
-					finalStdErr.WriteString(fmt.Sprintf("Input:\n%s\n\nExpected:\n%s\n\nGot:\n%s", tc.Input, expected, runOut))
-					
-					break // User Requirement: Stop finding failed test cases after the first one
-				}
+		status := "SUCCESS"
+		output := stdOutBuf.String()
+		stderr := stdErrBuf.String()
+		passedCount := 0
+
+		if err != nil {
+			if err.Error() == "execution timed out" {
+				status = "TIMEOUT"
 			} else {
-				// Playground: just record output
-				finalStdOut.WriteString(runOut)
-				finalStdErr.WriteString(stdErrBuf.String())
+				status = "ERROR"
 			}
 		}
 
-		// Final Status Logic for Questions
-		if req.QuestionID != "" {
-			if finalStatus == "SUCCESS" {
-				finalStdOut.Reset()
-				finalStdOut.WriteString("Success")
-			} 
-			// If FAILURE or ERROR, finalStdOut is already correctly set inside the loop
+		if status == "SUCCESS" {
+				var results []models.TestResult
+				if jsonErr := json.Unmarshal([]byte(output), &results); jsonErr == nil {
+					if len(results) == 0 {
+						status = "SUCCESS"
+						passedCount = totalTestCases
+					} else {
+						failure := results[0]
+						status = "FAILURE"
+						if idVal, err := strconv.Atoi(failure.TestCaseID); err == nil {
+							passedCount = idVal - 1
+						}
+						stderr = fmt.Sprintf("Failed Case %s:\n\nExpected Output:\n%s\n\nActual Output:\n%s", 
+							failure.TestCaseID, failure.Expected, failure.Actual)
+					}
+				} else {
+					status = "ERROR"
+				stderr += "\nJudge Error: Output format invalid (Output limit might be exceeded)."
+			}
 		}
 
-		w.db.UpdateResult(
-			submissionID,
-			finalStatus,
-			finalStdOut.String(),
-			finalStdErr.String(),
-			totalTime,
-			passedTests,
-			totalTests,
-			"100M", // Placeholder
-		)
-
-		log.Info().Field("job_id", submissionID).Field("status", finalStatus).Msg("Job finished")
+		w.db.UpdateResult(payload.SubmissionID, status, output, stderr, int(execTime.Milliseconds()), passedCount, totalTestCases)
+		log.Info().Field("job_id", payload.SubmissionID).Field("status", status).Msg("Job finished")
 	}
 }
+
+func (w *Worker) generateFiles(payload *models.JobPayload) (map[string]string, int, error) {
+	files := make(map[string]string)
+	
+	var testsJSON []byte
+	var err error
+	var tests []models.TestCase
+
+	if payload.QuestionID != "" {
+		testPath := filepath.Join("Questions", payload.QuestionID, "tests.json")
+		testsJSON, err = os.ReadFile(testPath)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to load tests for question %s: %v", payload.QuestionID, err)
+		}
+	} else {
+		defaultTests := []models.TestCase{{ID: "1", Input: "test", ExpectedOutput: "test"}}
+		testsJSON, _ = json.Marshal(defaultTests)
+	}
+
+	if err := json.Unmarshal(testsJSON, &tests); err != nil {
+		return nil, 0, err
+	}
+	
+	files["tests.json"] = string(testsJSON)
+
+	switch payload.Language {
+	case "python3", "python":
+		files["solution.py"] = payload.Code
+		files["driver.py"] = pythonDriverTemplate
+	case "node", "javascript":
+		files["solution.js"] = payload.Code
+		files["driver.js"] = nodeDriverTemplate
+	default:
+		files["main.code"] = payload.Code
+		return nil, 0, fmt.Errorf("language %s not fully supported", payload.Language)
+	}
+
+	return files, len(tests), nil
+}
+
+const pythonDriverTemplate = `
+import json
+import sys
+
+def solve(i): return str(i) # Default mock
+
+try:
+    import solution
+    if hasattr(solution, 'solve'):
+        solve = solution.solve
+except ImportError:
+    pass
+except Exception:
+    pass
+
+def run():
+    failed_result = None
+    try:
+        with open("tests.json") as f: tests = json.load(f)
+        for t in tests:
+            res = {"id": t["id"], "status": "FAILED", "expected": t["expected_output"], "actual": ""}
+            try:
+                inp = t["input"]
+                try: 
+                    if "." not in inp: inp = int(inp)
+                except: pass
+                val = solve(inp)
+                actual = str(val)
+                res["actual"] = actual
+                if actual.strip() == t["expected_output"].strip(): res["status"] = "PASSED"
+            except Exception as e:
+                res["status"] = "ERROR"
+                res["actual"] = str(e)
+            if res["status"] != "PASSED":
+                failed_result = res
+                break
+        if failed_result: print(json.dumps([failed_result]))
+        else: print(json.dumps([]))
+    except Exception as e:
+        print(json.dumps([{"id": "0", "status": "ERROR", "actual": str(e), "expected": ""}]))
+if __name__ == "__main__": run()
+`
+
+const nodeDriverTemplate = `
+const fs = require('fs');
+let solve = (i) => i; 
+try {
+    const userMod = require('./solution');
+    if (typeof userMod === 'function') solve = userMod;
+} catch (e) {}
+try {
+    const tests = JSON.parse(fs.readFileSync('tests.json', 'utf8'));
+    let failedResult = null;
+    for (const t of tests) {
+        const res = { id: t.id, status: "FAILED", expected: t.expected_output, actual: "" };
+        try {
+            let inp = t.input;
+            if(!isNaN(inp)) inp = Number(inp);
+            const val = solve(inp);
+            res.actual = String(val);
+            if (res.actual.trim() === t.expected_output.trim()) res.status = "PASSED";
+        } catch (e) { res.status = "ERROR"; res.actual = e.message; }
+        if (res.status !== "PASSED") { failedResult = res; break; }
+    }
+    if (failedResult) console.log(JSON.stringify([failedResult]));
+    else console.log(JSON.stringify([])); 
+} catch (e) { console.log(JSON.stringify([{id: "0", status: "ERROR", actual: e.message, expected: ""}])); }
+`

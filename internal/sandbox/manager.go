@@ -4,14 +4,13 @@ import (
 	"code-runner/internal/config"
 	"code-runner/internal/file"
 	"code-runner/internal/spec"
-	"code-runner/pkg/models"
-	"errors"
 	"fmt"
 	"github.com/rs/xid"
 	"github.com/zekrotja/rogu/log"
-	"path"
+	// "path"
 	"sync"
 	"time"
+	"errors"
 )
 
 type Manager struct {
@@ -26,23 +25,25 @@ func NewManager(sb Provider, sp *spec.BaseProvider, fp *file.LocalFileProvider, 
 	return &Manager{sandbox: sb, spec: sp, file: fp, cfg: cfg}, nil
 }
 
-// RunInSandbox now accepts inputData (stdin)
-func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest, inputData []byte, cout, cerr chan []byte, cstop chan bool) error {
-	spc, ok := m.spec.Get(req.Language)
+func (m *Manager) RunInSandbox(submissionID string, lang string, files map[string]string, env map[string]string, cout, cerr chan []byte, cstop chan bool) error {
+	spc, ok := m.spec.Get(lang)
 	if !ok {
-		log.Error().Field("language", req.Language).Msg("Unsupported language specification")
-		return fmt.Errorf("unsupported language: %s", req.Language)
+		log.Error().Field("language", lang).Msg("Unsupported language specification")
+		return fmt.Errorf("unsupported language: %s", lang)
 	}
 
-	// Use provided ID or generate one (unique for every run to avoid file collisions)
-	runId := xid.New().String()
+	runId := submissionID
+	if runId == "" {
+		runId = xid.New().String()
+	}
+
+	log.Debug().Field("RunID", runId).Field("Language", lang).Msg("Starting code execution job")
 
 	runSpc := RunSpec{
 		Spec:        spc,
 		Subdir:      runId,
 		HostDir:     m.cfg.Config().HostRootDir,
-		Arguments:   req.Arguments,
-		Environment: req.Environment,
+		Environment: env,
 	}
 
 	if runSpc.Cmd == "" {
@@ -52,7 +53,11 @@ func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest
 	hostDir := runSpc.GetAssembledHostDir()
 
 	m.file.CreateDirectory(hostDir)
-	m.file.CreateFile(path.Join(hostDir, spc.FileName), req.Code)
+	
+	if err := m.file.CreateFiles(hostDir, files); err != nil {						// Create all files (User Code, Runner, TestCases)
+		m.file.DeleteDirectory(hostDir)
+		return fmt.Errorf("failed to create files: %w", err)
+	}
 	
 	defer func() {
 		m.file.DeleteDirectory(hostDir)
@@ -64,18 +69,19 @@ func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest
 		return fmt.Errorf("failed to create sandbox: %w", err)
 	}
 	
+	// clean up
 	defer func() {
 		sbx.Kill()
 		sbx.Delete()
 		m.running.Delete(sbx.ID())
 	}()
 
+	log.Info().Field("ContainerID", sbx.ID()).Msg("Docker container created and started")
 	m.running.Store(sbx.ID(), sbx)
 
 	finished := make(chan bool)
 	go func() {
-		// Pass inputData to Run
-		err := sbx.Run(inputData, cout, cerr, finished)
+		err := sbx.Run(cout, cerr, finished)
 		if err != nil {
 			log.Error().Err(err).Field("ContainerID", sbx.ID()).Msg("Sandbox run failed during execution")
 		}
@@ -84,7 +90,7 @@ func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest
 	timedOut := false
 	select {
 	case <-finished:
-		// log.Debug().Field("ContainerID", sbx.ID()).Msg("Sandbox finished execution")
+		log.Debug().Field("ContainerID", sbx.ID()).Msg("Sandbox finished execution")
 	case <-time.After(time.Duration(m.cfg.Config().Sandbox.TimeoutSeconds) * time.Second):
 		log.Warn().Field("ContainerID", sbx.ID()).Msg("Sandbox timed out.")
 		timedOut = true
