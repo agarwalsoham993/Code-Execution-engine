@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Scalable Code Runner</title>
+    <title>Coding Platform</title>
     <style>
         :root {
             --bg-dark: #0d0d0d;
@@ -22,11 +22,20 @@
             overflow: hidden; 
         }
         
-        /* Layout Structure */
+        /* Three Columns: History | Main Editor | Questions */
         .sidebar { 
-            width: 320px; 
+            width: 280px; 
             background: var(--bg-sidebar); 
             border-right: 1px solid var(--border); 
+            display: flex; 
+            flex-direction: column; 
+            flex-shrink: 0;
+        }
+
+        .right-panel {
+            width: 300px; 
+            background: var(--bg-sidebar); 
+            border-left: 1px solid var(--border); 
             display: flex; 
             flex-direction: column; 
             flex-shrink: 0;
@@ -39,7 +48,6 @@
             overflow: hidden;
         }
 
-        /* Spacing Fixes */
         .header-bar {
             padding: 12px 20px;
             background: #111;
@@ -47,6 +55,15 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+        }
+        
+        .question-display {
+            background: #1a1a1a;
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            min-height: 60px;
+            max-height: 150px;
+            overflow-y: auto;
         }
 
         .editor-container {
@@ -65,21 +82,18 @@
             color: var(--accent);
             text-transform: uppercase;
             font-size: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
 
-        .history-list { overflow-y: auto; flex: 1; }
-        .history-item { 
+        .list-container { overflow-y: auto; flex: 1; }
+        .list-item { 
             padding: 15px; 
             border-bottom: 1px solid #222; 
             cursor: pointer; 
             transition: background 0.2s;
             border-left: 3px solid transparent;
         }
-        .history-item:hover { background: #1a1a1a; }
-        .history-item.active { 
+        .list-item:hover { background: #1a1a1a; }
+        .list-item.active { 
             background: #1a1a1a; 
             border-left: 3px solid var(--accent);
         }
@@ -88,7 +102,7 @@
         .badge-PENDING { background: #444; color: #fff; }
         .badge-PROCESSING { background: #0077ff; color: #fff; }
         .badge-SUCCESS { background: #008800; color: #fff; }
-        .badge-ERROR, .badge-TIMEOUT { background: #880000; color: #fff; }
+        .badge-ERROR, .badge-TIMEOUT, .badge-FAILURE { background: #880000; color: #fff; }
 
         .controls { display: flex; gap: 10px; }
         select, button { 
@@ -104,7 +118,7 @@
         
         textarea { 
             width: 100%; 
-            height: 380px; 
+            height: 100%; 
             background: #050505; 
             color: #d4d4d4; 
             border: 1px solid var(--border); 
@@ -115,6 +129,7 @@
             font-size: 14px;
             border-radius: 4px;
             box-sizing: border-box;
+            flex: 1;
         }
         
         .output-box { 
@@ -134,8 +149,9 @@
             margin-top: 10px; 
             padding-top: 10px; 
             border-top: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
         }
-
         .spinner {
             display: inline-block;
             width: 12px;
@@ -148,60 +164,183 @@
             margin-right: 8px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.8); 
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #1a1a1a;
+            margin: 10% auto; 
+            padding: 25px;
+            border: 1px solid #444;
+            width: 60%; 
+            color: #eee;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #fff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn-wrong-case {
+            background-color: #aa0000;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin-top: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .btn-wrong-case:hover {
+            background-color: #cc0000;
+        }
     </style>
 </head>
 <body>
 
+    <!-- Modal -->
+    <div id="errorModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3 style="margin-top:0; color: var(--accent);">Failed Test Case Details</h3>
+            <pre id="modalText" style="background:#000; padding:15px; border-radius:4px; border:1px solid #333; overflow:auto;"></pre>
+        </div>
+    </div>
+
+    <!-- Left: Submissions -->
     <div class="sidebar">
         <div class="sidebar-header">
             <span>Submissions</span>
             <button onclick="loadHistory()" style="padding: 2px 8px; font-size: 10px;">Refresh</button>
         </div>
-        <div class="history-list" id="history">
+        <div class="list-container" id="history">
             <div style="padding:20px; color:#666;">No attempts found.</div>
         </div>
     </div>
 
+    <!-- Center: Editor -->
     <div class="main">
         <div class="header-bar">
-            <h2 style="margin:0; font-size: 18px; color: var(--accent);">Code runner</h2>
+            <h2 style="margin:0; font-size: 18px; color: var(--accent);">Solver</h2>
             <div class="controls">
                 <select id="lang"><option>Loading...</option></select>
                 <button onclick="submitCode()">EXECUTE</button>
             </div>
         </div>
         
+        <div class="question-display" id="question-box">
+            <div style="color:#666; font-style:italic;">Select a question from the right panel to begin.</div>
+        </div>
+        
         <div class="editor-container">
-            <textarea id="code" spellcheck="false" placeholder="// Paste code here..."></textarea>
+            <textarea id="code" spellcheck="false" placeholder="// Select a question and write your solution..."></textarea>
             
-            <div style="font-weight: bold; font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 1px;">Terminal Output</div>
+            <div style="font-weight: bold; font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 1px;">Console</div>
             <div class="output-box" id="output">
                 <div style="color:#444">Ready...</div>
             </div>
         </div>
     </div>
 
+    <!-- Right: Questions -->
+    <div class="right-panel">
+        <div class="sidebar-header">Questions</div>
+        <div class="list-container" id="questions">
+            <div style="padding:20px; color:#666;">Loading...</div>
+        </div>
+    </div>
+
     <script>
         const API = "http://localhost:8080/v1";
         let currentSubmissionId = null;
+        let selectedQuestionId = "";
         let isProcessing = false;
 
-        // Fetch specs
-        fetch(`${API}/spec`).then(r=>r.json()).then(d=>{
-            const s = document.getElementById('lang'); s.innerHTML='';
-            Object.keys(d).forEach(k=>s.innerHTML+=`<option value="${k}">${k}</option>`);
-        });
-        
-        // Polling
+        // Init
+        fetchSpecs();
+        fetchQuestions();
         setInterval(loadHistory, 2000);
         loadHistory();
 
-        function formatTime(dateStr) {
+        // Modal Logic
+        function closeModal() {
+            document.getElementById('errorModal').style.display = 'none';
+        }
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('errorModal')) {
+                closeModal();
+            }
+        }
+
+        function fetchSpecs() {
+            fetch(`${API}/spec`).then(r=>r.json()).then(d=>{
+                const s = document.getElementById('lang'); s.innerHTML='';
+                Object.keys(d).forEach(k=>s.innerHTML+=`<option value="${k}">${k}</option>`);
+            });
+        }
+
+        async function fetchQuestions() {
             try {
-                const date = new Date(dateStr);
-                if (isNaN(date.getTime())) return "N/A";
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            } catch(e) { return "N/A"; }
+                const res = await fetch(`${API}/questions`);
+                const data = await res.json();
+                const list = document.getElementById('questions');
+                list.innerHTML = '';
+                if(!data || data.length === 0) {
+                    list.innerHTML = '<div style="padding:20px;">No questions found.</div>';
+                    return;
+                }
+                data.forEach(q => {
+                    const div = document.createElement('div');
+                    div.className = 'list-item';
+                    div.innerText = q.title;
+                    div.onclick = () => loadQuestion(q.id, div);
+                    list.appendChild(div);
+                });
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadQuestion(id, el) {
+            // UI Toggle
+            document.querySelectorAll('#questions .list-item').forEach(e=>e.classList.remove('active'));
+            if(el) el.classList.add('active');
+            
+            selectedQuestionId = id;
+            
+            // Fetch Details
+            try {
+                const res = await fetch(`${API}/questions/${id}`);
+                const data = await res.json();
+                document.getElementById('question-box').innerHTML = `
+                    <strong style="color:white; display:block; margin-bottom:5px;">Problem ${data.id}</strong>
+                    <div style="white-space: pre-wrap; font-size: 0.9em;">${data.description}</div>
+                `;
+            } catch(e) {
+                document.getElementById('question-box').innerHTML = '<div style="color:red">Failed to load question</div>';
+            }
         }
 
         async function submitCode() {
@@ -209,7 +348,7 @@
             isProcessing = true;
 
             const out = document.getElementById('output');
-            out.innerHTML = '<div class="spinner"></div>Sending to worker...';
+            out.innerHTML = '<div class="spinner"></div>Submitting...';
             
             try {
                 const res = await fetch(`${API}/exec`, {
@@ -217,12 +356,13 @@
                     headers:{'Content-Type':'application/json'},
                     body: JSON.stringify({
                         language: document.getElementById('lang').value,
-                        code: document.getElementById('code').value
+                        code: document.getElementById('code').value,
+                        question_id: selectedQuestionId
                     })
                 });
                 const d = await res.json();
                 currentSubmissionId = d.submission_id;
-                out.innerHTML = `<div class="spinner"></div>Running job ${currentSubmissionId}...`;
+                out.innerHTML = `<div class="spinner"></div>Processing ID: ${currentSubmissionId}...`;
                 loadHistory(); 
             } catch(e) { 
                 out.innerHTML = `<div class="stderr">Error: ${e.message}</div>`; 
@@ -251,7 +391,10 @@
                         showDetails(sub);
                     };
                     
-                    const timeTook = sub.exec_time_ms > 0 ? `• ${sub.exec_time_ms}ms` : '';
+                    let meta = '';
+                    if (sub.question_id) {
+                         meta = `<br><span style="color:#888; font-size:0.9em;">Q: ${sub.question_id}</span>`;
+                    }
                     
                     item.innerHTML = `
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
@@ -259,12 +402,12 @@
                             <span class="badge badge-${sub.status}">${sub.status}</span>
                         </div>
                         <div style="font-size:0.75em; color:#666;">
-                            ${formatTime(sub.created_at)} ${timeTook}
+                            ${new Date(sub.created_at).toLocaleTimeString()} 
+                            ${meta}
                         </div>
                     `;
                     list.appendChild(item);
 
-                    // Auto-update output when job finishes
                     if (isActive && isProcessing && !['PENDING', 'PROCESSING'].includes(sub.status)) {
                         isProcessing = false;
                         showDetails(sub);
@@ -275,16 +418,29 @@
 
         function showDetails(sub) {
             const out = document.getElementById('output');
-            const timeInfo = sub.exec_time_ms > 0 ? `| <strong>Time:</strong> ${sub.exec_time_ms}ms` : '';
             
-            out.innerHTML = `
-                <div class="stdout">${sub.stdout || ''}</div>
-                <div class="stderr">${sub.stderr || ''}</div>
-                <div class="meta">
-                    <strong>Status:</strong> ${sub.status} ${timeInfo} | 
-                    <strong>ID:</strong> ${sub.id}
-                </div>
-            `;
+            // Format Stats
+            let stats = '';
+            if (sub.question_id) {
+                stats = `<div style="margin-top:10px; padding:10px; background:#111; border:1px solid #333; border-radius:4px;"><div><strong>Passed:</strong> ${sub.passed_count}/${sub.total_count}</div><div><strong>Memory:</strong> ${sub.memory_used || 'N/A'}</div></div>`;
+            }
+
+            // Concatenating strings to avoid indentation issues with white-space: pre-wrap
+            out.innerHTML = `<div class="stdout" style="font-size: 1.1em; color: ${sub.status === 'SUCCESS' ? '#0f0' : (sub.status === 'FAILURE' ? '#f00' : '#ccc')}">${sub.stdout || ''}</div>` +
+                (sub.status === 'FAILURE' ? '<button id="btnViewWrong" class="btn-wrong-case">View Wrong Test Case</button>' : '') +
+                `<div class="stderr">${sub.status === 'ERROR' ? sub.stderr : ''}</div>` +
+                stats +
+                `<div class="meta"><span>${sub.status} | ${sub.exec_time_ms}ms</span><span>ID: ${sub.id}</span></div>`;
+            
+            // Attach click handler for the button if it exists
+            const btn = document.getElementById('btnViewWrong');
+            if (btn) {
+                btn.onclick = () => {
+                    document.getElementById('modalText').innerText = sub.stderr;
+                    document.getElementById('errorModal').style.display = 'block';
+                };
+            }
+
             document.getElementById('code').value = sub.code;
             document.getElementById('lang').value = sub.language;
         }

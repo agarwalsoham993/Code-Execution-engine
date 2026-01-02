@@ -9,7 +9,8 @@ import (
 
 type Sandbox interface {
 	ID() string
-	Run(stdout, stderr chan []byte, close chan bool) error
+	// Run now accepts stdin
+	Run(stdin []byte, stdout, stderr chan []byte, close chan bool) error
 	Kill() error
 	Delete() error
 }

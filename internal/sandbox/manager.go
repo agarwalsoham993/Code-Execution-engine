@@ -26,20 +26,16 @@ func NewManager(sb Provider, sp *spec.BaseProvider, fp *file.LocalFileProvider, 
 	return &Manager{sandbox: sb, spec: sp, file: fp, cfg: cfg}, nil
 }
 
-func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest, cout, cerr chan []byte, cstop chan bool) error {
+// RunInSandbox now accepts inputData (stdin)
+func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest, inputData []byte, cout, cerr chan []byte, cstop chan bool) error {
 	spc, ok := m.spec.Get(req.Language)
 	if !ok {
 		log.Error().Field("language", req.Language).Msg("Unsupported language specification")
 		return fmt.Errorf("unsupported language: %s", req.Language)
 	}
 
-	// Use provided ID or generate one
-	runId := submissionID
-	if runId == "" {
-		runId = xid.New().String()
-	}
-
-	log.Debug().Field("RunID", runId).Field("Language", req.Language).Msg("Starting code execution job")
+	// Use provided ID or generate one (unique for every run to avoid file collisions)
+	runId := xid.New().String()
 
 	runSpc := RunSpec{
 		Spec:        spc,
@@ -58,7 +54,6 @@ func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest
 	m.file.CreateDirectory(hostDir)
 	m.file.CreateFile(path.Join(hostDir, spc.FileName), req.Code)
 	
-	// Ensure cleanup happens even if container creation fails
 	defer func() {
 		m.file.DeleteDirectory(hostDir)
 	}()
@@ -69,19 +64,18 @@ func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest
 		return fmt.Errorf("failed to create sandbox: %w", err)
 	}
 	
-	// Ensure container is cleaned up
 	defer func() {
 		sbx.Kill()
 		sbx.Delete()
 		m.running.Delete(sbx.ID())
 	}()
 
-	log.Info().Field("ContainerID", sbx.ID()).Msg("Docker container created and started")
 	m.running.Store(sbx.ID(), sbx)
 
 	finished := make(chan bool)
 	go func() {
-		err := sbx.Run(cout, cerr, finished)
+		// Pass inputData to Run
+		err := sbx.Run(inputData, cout, cerr, finished)
 		if err != nil {
 			log.Error().Err(err).Field("ContainerID", sbx.ID()).Msg("Sandbox run failed during execution")
 		}
@@ -90,7 +84,7 @@ func (m *Manager) RunInSandbox(submissionID string, req *models.ExecutionRequest
 	timedOut := false
 	select {
 	case <-finished:
-		log.Debug().Field("ContainerID", sbx.ID()).Msg("Sandbox finished execution")
+		// log.Debug().Field("ContainerID", sbx.ID()).Msg("Sandbox finished execution")
 	case <-time.After(time.Duration(m.cfg.Config().Sandbox.TimeoutSeconds) * time.Second):
 		log.Warn().Field("ContainerID", sbx.ID()).Msg("Sandbox timed out.")
 		timedOut = true

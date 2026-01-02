@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"code-runner/internal/config"
 	"code-runner/internal/sandbox"
 	"code-runner/pkg/models"
@@ -49,11 +50,16 @@ func (p *Provider) CreateSandbox(spec sandbox.RunSpec) (sandbox.Sandbox, error) 
 	container, err := p.client.CreateContainer(dockerclient.CreateContainerOptions{
 		Name: fmt.Sprintf("runner-%s-%s", spec.Language, xid.New().String()),
 		Config: &dockerclient.Config{
-			Image:      spec.Image,
-			WorkingDir: workingDir,
-			Entrypoint: spec.GetEntrypoint(),
-			Cmd:        spec.GetCommandWithArgs(),
-			Env:        spec.GetEnv(),
+			Image:        spec.Image,
+			WorkingDir:   workingDir,
+			Entrypoint:   spec.GetEntrypoint(),
+			Cmd:          spec.GetCommandWithArgs(),
+			Env:          spec.GetEnv(),
+			OpenStdin:    true, // Enable Stdin
+			StdinOnce:    true,
+			AttachStdin:  true,
+			AttachStdout: true,
+			AttachStderr: true,
 		},
 		HostConfig: &dockerclient.HostConfig{
 			Binds: []string{hostDir + ":" + workingDir},
@@ -74,14 +80,22 @@ type Sandbox struct {
 
 func (s *Sandbox) ID() string { return s.container.ID }
 
-func (s *Sandbox) Run(stdout, stderr chan []byte, close chan bool) error {
+func (s *Sandbox) Run(stdin []byte, stdout, stderr chan []byte, close chan bool) error {
 	go func() {
-		s.client.AttachToContainer(dockerclient.AttachToContainerOptions{
+		opts := dockerclient.AttachToContainerOptions{
 			Container:    s.container.ID,
 			OutputStream: &ChanWriter{stdout},
 			ErrorStream:  &ChanWriter{stderr},
 			Stdout:       true, Stderr: true, Stream: true,
-		})
+		}
+		
+		// If Stdin provided, attach it
+		if len(stdin) > 0 {
+			opts.InputStream = bytes.NewBuffer(stdin)
+			opts.Stdin = true
+		}
+
+		s.client.AttachToContainer(opts)
 		close <- true
 	}()
 	return s.client.StartContainer(s.container.ID, nil)

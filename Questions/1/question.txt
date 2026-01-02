@@ -1,0 +1,2 @@
+If the corresponding no is >0 , we output 2n+1
+else 2n-1 : where n is the input.

@@ -5,6 +5,7 @@ import (
 	"code-runner/internal/config"
 	"code-runner/internal/database"
 	"code-runner/internal/file"
+	"code-runner/internal/question"
 	"code-runner/internal/queue"
 	"code-runner/internal/sandbox"
 	"code-runner/internal/sandbox/docker"
@@ -20,33 +21,31 @@ import (
 func main() {
 	godotenv.Load()
 
-	// 1. Config
 	cfg := config.NewEnvProvider("RUNNER_")
 	if err := cfg.Load(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to load config")
 	}
 
-	// 2. Database
 	db, err := database.NewPostgresDB(cfg.Config().Database.DSN)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to Database")
 	}
 	log.Info().Msg("Connected to Postgres")
 
-	// 3. Queue
 	q := queue.NewRedisQueue(cfg.Config().Redis.Addr, cfg.Config().Redis.Pwd)
 	log.Info().Msg("Connected to Redis")
 
-	// 4. Specs
 	specProvider := spec.NewFileProvider("spec/spec.yaml")
+	
+	// Init Question Provider
+	// Assumes "Questions" dir is in the current working directory
+	questionProvider := question.NewProvider("Questions")
 
-	// 5. Docker Sandbox
 	sandboxProvider, err := docker.NewProvider(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to init docker")
 	}
 
-	// 6. Sandbox Manager
 	fileProvider := file.NewLocalFileProvider()
 	mgr, err := sandbox.NewManager(sandboxProvider, specProvider, fileProvider, cfg)
 	if err != nil {
@@ -54,14 +53,14 @@ func main() {
 	}
 	defer mgr.Cleanup()
 
-	// 7. Start Workers (Background Consumer)
 	for i := 0; i < cfg.Config().WorkerCount; i++ {
-		w := worker.NewWorker(i+1, q, db, mgr)
+		// Pass question provider to worker
+		w := worker.NewWorker(i+1, q, db, mgr, questionProvider)
 		go w.Start()
 	}
 
-	// 8. Start API Server (Producer)
-	webApi, err := api.NewRestAPI(cfg, specProvider, q, db)
+	// Pass question provider to API
+	webApi, err := api.NewRestAPI(cfg, specProvider, q, db, questionProvider)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create API")
 	}
@@ -74,7 +73,6 @@ func main() {
 
 	log.Info().Msgf("Code Runner Started on port %s with %d workers...", cfg.Config().API.BindAddress, cfg.Config().WorkerCount)
 
-	// Graceful Shutdown
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
