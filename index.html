@@ -57,6 +57,16 @@
             max-height: 200px;
             overflow-y: auto;
         }
+        .admin-question-fields {
+            background: #1a1a1a;
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+        body.is-admin .admin-question-fields { display: flex; }
+        body.is-admin .question-display { display: none; }
 
         .editor-container, .log-container {
             flex: 1;
@@ -125,7 +135,7 @@
         .btn-admin { color: var(--accent-admin); border-color: var(--accent-admin); }
         .btn-admin:hover { background: var(--accent-admin); color: #000; }
 
-        textarea.code-editor { 
+        textarea.code-editor, textarea.gen-editor { 
             width: 100%; 
             background: #050505; 
             color: #d4d4d4; 
@@ -189,25 +199,30 @@
         .btn-wrong-case { background-color: #aa0000; color: white; border: none; padding: 8px 15px; margin-top: 10px; cursor: pointer; border-radius: 4px; font-weight: bold;}
 
         /* Admin forms inside sidebar */
-        .admin-section { display: none; padding: 20px; flex-direction: column; gap: 15px; }
+        .admin-section { display: none; padding: 20px; flex-direction: column; gap: 15px; overflow-y: auto; flex:1;}
         .admin-section label { font-size: 11px; color: #888; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
         .admin-section input, .admin-section textarea { width: 100%; box-sizing: border-box; }
-        body.is-admin .admin-section { display: flex; }
-        body.is-admin .user-section { display: none; }
+        body.is-admin .admin-section { display: flex !important; }
+        body.is-admin .user-section { display: none !important; }
         body.is-admin .sidebar-header { color: var(--accent-admin); border-color: var(--accent-admin); }
         body.is-admin .list-item.active { border-left-color: var(--accent-admin); }
         body.is-admin .btn-primary { color: var(--accent-admin); border-color: var(--accent-admin); }
         body.is-admin .btn-primary:hover { background: var(--accent-admin); color: #000; }
         body.is-admin .spinner { border-top-color: var(--accent-admin); }
 
-        .test-case-controls {
-            display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;
+        .packet {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 10px 15px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 13px;
         }
-        .add-btn { background: #222; color: #fff; border: 1px dashed #555; width: 100%; padding: 10px; margin-top: 10px; text-align: center; cursor: pointer; }
-        .add-btn:hover { background: #333; }
-        .test-input-row { display: flex; gap: 5px; margin-bottom: 5px; }
-        .test-input-row input { flex:1; padding: 5px; font-size: 12px; }
-        .remove-btn { background: transparent; border: none; color: #ff5555; cursor: pointer; font-weight: bold; }
+        .packet span { font-weight: bold; color: var(--accent-admin); }
+        .remove-btn { background: transparent; border: none; color: #ff5555; cursor: pointer; font-weight: bold; font-size: 14px; padding: 0;}
     </style>
 </head>
 <body>
@@ -228,29 +243,40 @@
             <div class="list-container" id="history"><div style="padding:20px; color:#666;">No attempts found.</div></div>
         </div>
 
-        <!-- Admin View: Question Editor -->
-        <div class="admin-section" style="flex:1; overflow-y:auto; padding:20px 15px;">
-            <h3 style="margin:0 0 10px 0; color:var(--accent-admin);">Question Config</h3>
+        <!-- Admin View: Input Generator -->
+        <div class="admin-section">
+            <h3 style="margin:0 0 10px 0; color:var(--accent-admin);">Input Generator</h3>
             <div>
-                <label>Title</label>
-                <input type="text" id="admin-q-title" placeholder="e.g. Two Sum">
+                <label>Language</label>
+                <select id="gen-lang"><option value="python">Python</option></select>
             </div>
-            <div>
-                <label>Description</label>
-                <textarea id="admin-q-desc" placeholder="Markdown supported..." style="height:100px; resize:vertical;"></textarea>
-            </div>
-            
-            <div style="margin-top:20px; border-top:1px solid #333; padding-top:20px;">
-                <label style="color:var(--accent-admin)">Inputs for Generator</label>
-                <div style="font-size:11px; color:#aaa; margin-bottom:10px;">Provide test inputs below. The central code editor acts as the "Solution Code". Generating will run it and save outputs!</div>
-                
-                <div id="admin-inputs-list">
-                    <!-- Dynamic inputs populated here -->
-                </div>
-                <div class="add-btn" onclick="addAdminInput()">+ Add Input Case</div>
-            </div>
+            <div style="flex:1; display:flex; flex-direction:column;">
+                <label>Generator Code</label>
+                <textarea id="gen-code" class="gen-editor" spellcheck="false" style="min-height: 250px;">
+import json
+import random
 
-            <button onclick="clearAdminForm()" style="margin-top:10px; width:100%;">Clear Form (New Question)</button>
+# ADMIN DEFINES THIS:
+def generate_input():
+    inputs = []
+    for _ in range(5):
+        inputs.append(str(random.randint(1, 100)))
+    return inputs
+
+print(json.dumps(generate_input()))
+</textarea>
+            </div>
+            <button class="btn-primary btn-admin" onclick="runInputGenerator()">Generate Input Packet</button>
+            <div id="gen-error" class="stderr" style="font-size: 12px; display: none; white-space: pre-wrap;"></div>
+
+            <div style="margin-top:20px; border-top:1px solid #333; padding-top:20px;">
+                <label style="color:var(--accent-admin)">Test Inputs</label>
+                <div id="packets-list" style="margin-top:10px;"></div>
+                <div style="display:flex; gap:5px; margin-top:10px;">
+                    <input type="text" id="manual-input-val" style="flex:1" placeholder="Single manual input">
+                    <button class="btn-primary" onclick="addManualInput()">Add</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -266,17 +292,31 @@
             </div>
         </div>
         
+        <!-- User View: Real Question Display -->
         <div class="question-display" id="question-box">
             <div style="color:#666; font-style:italic;">Select a question from the right panel to begin.</div>
+        </div>
+
+        <!-- Admin View: Title/Desc Setup -->
+        <div class="admin-question-fields">
+            <div>
+                <input type="text" id="admin-q-title" placeholder="Question Title (e.g. Two Sum)" style="font-size:16px; font-weight:bold; width: 100%; border:none; background:transparent; outline:none; color:#fff;">
+            </div>
+            <div>
+                <textarea id="admin-q-desc" placeholder="Problem Description (Markdown Supported)..." style="height:60px; width: 100%; border:1px solid #333; background:transparent; outline:none; color:#ddd; resize:vertical; padding:8px; font-family:inherit;"></textarea>
+            </div>
         </div>
         
         <!-- Code Editor View -->
         <div class="editor-container" id="view-editor">
-            <textarea id="code" class="code-editor" spellcheck="false" placeholder="// Select a question and write your code..."></textarea>
+            <textarea id="code" class="code-editor" spellcheck="false" placeholder="// Select a question and write your solution..."></textarea>
             
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="font-weight: bold; font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 1px;">Console Output</div>
-                <button id="btn-save-db" onclick="saveGeneratedTestcasesToDB()" class="btn-primary btn-admin" style="display:none; padding:4px 10px; font-size:11px;">Save Question to DB</button>
+                <div style="display:flex; gap:10px;">
+                    <button id="btn-create-new" onclick="clearAdminForm()" class="btn-profile" style="display:none; padding:4px 10px; font-size:11px;">Clear Form (New)</button>
+                    <button id="btn-save-db" onclick="saveGeneratedTestcasesToDB()" class="btn-primary btn-admin" style="display:none; padding:4px 10px; font-size:11px;">Save Question to DB</button>
+                </div>
             </div>
             <div class="output-box" id="output">
                 <div style="color:#444">Ready...</div>
@@ -313,6 +353,9 @@
         
         let questionsList = [];
         let generatedGeneratedCasesCache = null;
+        
+        // Input Generator Arrays
+        let adminInputPackets = []; 
 
         fetchSpecs();
         fetchQuestions();
@@ -327,14 +370,13 @@
             
             document.getElementById('btn-execute').innerText = isAdmin ? "TEST GENERATOR" : "EXECUTE";
             document.getElementById('btn-toggle-logs').style.display = isAdmin ? "inline-block" : "none";
+            document.getElementById('btn-create-new').style.display = isAdmin ? "inline-block" : "none";
             document.getElementById('right-panel-header').innerText = isAdmin ? "Edit Questions" : "Questions";
             
             if (!isAdmin) {
                 if (showingLogs) toggleLogs();
                 document.getElementById('btn-save-db').style.display = 'none';
                 clearAdminForm();
-            } else {
-                addAdminInput(); // Ensure at least one input field is present
             }
             
             if (selectedQuestionId) {
@@ -347,7 +389,6 @@
             showingLogs = !showingLogs;
             document.getElementById('view-editor').style.display = showingLogs ? 'none' : 'flex';
             document.getElementById('view-logs').style.display = showingLogs ? 'flex' : 'none';
-            document.getElementById('question-box').style.display = showingLogs ? 'none' : 'block';
             document.getElementById('btn-toggle-logs').innerText = showingLogs ? "Hide Logs" : "View Logs";
             
             if (showingLogs) {
@@ -442,19 +483,21 @@
                         document.getElementById('code').value = "// Enter solution code here...";
                     }
 
-                    // Populate manual inputs from existing test cases if any
-                    const inputsList = document.getElementById('admin-inputs-list');
-                    inputsList.innerHTML = '';
-                    if (data.test_cases && data.test_cases.length > 0) {
-                        data.test_cases.forEach(tc => {
-                            if (tc.input) addAdminInput(tc.input);
-                        });
-                    } else {
-                        addAdminInput();
+                    if (data.generator_config && data.generator_config !== "{}") {
+                        document.getElementById('gen-code').value = data.generator_config;
                     }
+
+                    adminInputPackets = [];
+                    if (data.test_cases && data.test_cases.length > 0) {
+                        const inputs = data.test_cases.filter(tc => tc.input).map(tc => tc.input);
+                        if (inputs.length > 0) {
+                            adminInputPackets.push({ label: "Existing Question Inputs", values: inputs });
+                        }
+                    }
+                    renderInputPackets();
                     
                     document.getElementById('btn-save-db').style.display = 'block';
-                    generatedGeneratedCasesCache = data.test_cases || []; // keep old cases default
+                    generatedGeneratedCasesCache = data.test_cases || [];
                 } else {
                     document.getElementById('btn-save-db').style.display = 'none';
                 }
@@ -464,6 +507,109 @@
             }
         }
 
+        // ----------------------------------------------------
+        // INPUT GENERATOR SPECIFIC
+        // ----------------------------------------------------
+        async function runInputGenerator() {
+            const errDiv = document.getElementById('gen-error');
+            errDiv.style.display = 'none';
+            errDiv.innerText = '';
+            
+            const code = document.getElementById('gen-code').value;
+            const lang = document.getElementById('gen-lang').value;
+            
+            try {
+                const res = await fetch(`${API}/admin/generate-inputs`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ language: lang, code: code })
+                });
+                const d = await res.json();
+                if (!res.ok) throw new Error(d.Error || "Server error");
+                
+                pollGenerator(d.submission_id);
+            } catch (e) {
+                errDiv.style.display = 'block';
+                errDiv.innerText = `Deploy Error: ${e.message}`;
+            }
+        }
+
+        function pollGenerator(id) {
+            const errDiv = document.getElementById('gen-error');
+            const interval = setInterval(async () => {
+                try {
+                    const r = await fetch(`${API}/submissions/${id}`);
+                    if (!r.ok) return;
+                    const sub = await r.json();
+                    if (sub) {
+                        if (sub.status === 'SUCCESS' || sub.status === 'ERROR') {
+                            clearInterval(interval);
+                            if (sub.status === 'ERROR') {
+                                errDiv.style.display = 'block';
+                                errDiv.innerText = `Generator Error:\n${sub.stderr}`;
+                            } else {
+                                try {
+                                    const parsed = JSON.parse(sub.stdout);
+                                    if (Array.isArray(parsed) && parsed.length > 0) {
+                                        adminInputPackets.push({
+                                            label: "Generated Packet",
+                                            values: parsed
+                                        });
+                                        renderInputPackets();
+                                    } else {
+                                        errDiv.style.display = 'block';
+                                        errDiv.innerText = "Generator returned empty array.";
+                                        if (sub.stdout) errDiv.innerText += `\nStdout:\n${sub.stdout}`;
+                                    }
+                                } catch (e) {
+                                    errDiv.style.display = 'block';
+                                    errDiv.innerText = `Could not parse stdout to JSON array:\n${sub.stdout}`;
+                                }
+                            }
+                        }
+                    }
+                } catch(e) { console.error(e); }
+            }, 1000);
+        }
+
+        function addManualInput() {
+            const inp = document.getElementById('manual-input-val');
+            if (inp.value.trim() !== "") {
+                adminInputPackets.push({
+                    label: "Manual Input",
+                    values: [inp.value.trim()]
+                });
+                renderInputPackets();
+                inp.value = "";
+            }
+        }
+
+        function removePacket(idx) {
+            adminInputPackets.splice(idx, 1);
+            renderInputPackets();
+        }
+
+        function renderInputPackets() {
+            const list = document.getElementById('packets-list');
+            list.innerHTML = "";
+            adminInputPackets.forEach((p, idx) => {
+                const div = document.createElement('div');
+                div.className = 'packet';
+                const countText = p.values.length > 1 ? ` (${p.values.length})` : '';
+                div.innerHTML = `<span>${p.label}${countText}</span> <button class="remove-btn" onclick="removePacket(${idx})">&times;</button>`;
+                list.appendChild(div);
+            });
+        }
+
+        function getFlattenedInputs() {
+            let flats = [];
+            adminInputPackets.forEach(p => { flats = flats.concat(p.values); });
+            return flats;
+        }
+
+        // ----------------------------------------------------
+        // EXECUTION & SOLUTION GENERATION
+        // ----------------------------------------------------
         async function handleExecute() {
             if (isProcessing) return;
             const code = document.getElementById('code').value;
@@ -471,15 +617,11 @@
             const out = document.getElementById('output');
 
             if (isAdmin) {
-                // GENERATION MODE
                 isProcessing = true;
-                out.innerHTML = '<div class="spinner"></div>Generating Tests...';
+                out.innerHTML = '<div class="spinner"></div>Generating Test Cases...';
                 document.getElementById('btn-save-db').style.display = 'none';
 
-                let rawInputs = [];
-                document.querySelectorAll('.admin-input-val').forEach(inp => {
-                    if (inp.value.trim() !== '') rawInputs.push(inp.value.trim());
-                });
+                let rawInputs = getFlattenedInputs();
 
                 try {
                     const res = await fetch(`${API}/admin/generate`, {
@@ -489,7 +631,7 @@
                             language: lang,
                             code: code,
                             question_id: selectedQuestionId || "", 
-                            admin_inputs: rawInputs
+                            inputs: rawInputs
                         })
                     });
                     const d = await res.json();
@@ -504,7 +646,6 @@
                     isProcessing = false;
                 }
             } else {
-                // STANDARD EXECUTION
                 if (!selectedQuestionId) { alert("Please select a question first."); return; }
                 isProcessing = true;
                 out.innerHTML = '<div class="spinner"></div>Running code...';
@@ -533,9 +674,9 @@
             const out = document.getElementById('output');
             const interval = setInterval(async () => {
                 try {
-                    const r = await fetch(`${API}/submissions`);
-                    const history = await r.json();
-                    const sub = history.find(s => s.id === id);
+                    const r = await fetch(`${API}/submissions/${id}`);
+                    if (!r.ok) return;
+                    const sub = await r.json();
                     if (sub) {
                         if (sub.status === 'SUCCESS' || sub.status === 'FAILURE' || sub.status === 'ERROR') {
                             clearInterval(interval);
@@ -545,7 +686,6 @@
                                 showDetails(sub);
                                 loadHistory();
                             } else {
-                                // Generation finished
                                 if (sub.status === 'ERROR') {
                                     out.innerHTML = `<div class="stderr">Generation Runtime Error:</div><pre style="color:#aaa">${sub.stderr}</pre>`;
                                 } else {
@@ -582,34 +722,25 @@
                             }
                         }
                     }
-                } catch(e) {
-                    console.error("Poller error", e);
-                }
+                } catch(e) { console.error("Poller error", e); }
             }, 1000);
         }
 
-        function addAdminInput(val = "") {
-            const list = document.getElementById('admin-inputs-list');
-            const row = document.createElement('div');
-            row.className = 'test-input-row';
-            row.innerHTML = `
-                <input type="text" class="admin-input-val" value="${val}" placeholder="Raw input (e.g. '5 10')">
-                <button class="remove-btn" onclick="this.parentElement.remove()">X</button>
-            `;
-            list.appendChild(row);
-        }
-
+        // ----------------------------------------------------
+        // ADMIN SPECIFIC
+        // ----------------------------------------------------
         function clearAdminForm() {
             selectedQuestionId = null;
             document.querySelectorAll('#questions .list-item').forEach(e=>e.classList.remove('active'));
             document.getElementById('admin-q-title').value = '';
             document.getElementById('admin-q-desc').value = '';
             document.getElementById('code').value = '';
-            document.getElementById('admin-inputs-list').innerHTML = '';
-            addAdminInput();
+            
+            adminInputPackets = [];
+            renderInputPackets();
+
             document.getElementById('btn-save-db').style.display = 'none';
             document.getElementById('output').innerHTML = '<div style="color:#444">Ready...</div>';
-            document.getElementById('question-box').innerHTML = '<div style="color:#666; font-style:italic;">Creating new question...</div>';
             generatedGeneratedCasesCache = null;
         }
 
@@ -618,6 +749,7 @@
             const desc = document.getElementById('admin-q-desc').value;
             const code = document.getElementById('code').value;
             const lang = document.getElementById('lang').value;
+            const genCode = document.getElementById('gen-code').value;
             
             if (!title || !desc) { alert("Title and Description are required."); return; }
             if (!generatedGeneratedCasesCache || generatedGeneratedCasesCache.length === 0) {
@@ -630,7 +762,8 @@
                 description: desc,
                 test_cases: generatedGeneratedCasesCache,
                 solution_code: code,
-                solution_lang: lang
+                solution_lang: lang,
+                generator_config: genCode
             };
 
             try {
@@ -689,6 +822,9 @@
             } catch(e) { console.error(e); }
         }
 
+        // ----------------------------------------------------
+        // SHARED/USER SPECIFIC
+        // ----------------------------------------------------
         async function loadHistory() {
             try {
                 const res = await fetch(`${API}/submissions`);

@@ -67,6 +67,34 @@ func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, 
 		return c.JSON(fiber.Map{"success": true})
 	})
 
+	router.Post("/admin/generate-inputs", func(c *fiber.Ctx) error {
+		var req models.GenerateRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(models.ErrorModel{Error: "Invalid JSON"})
+		}
+		id := xid.New().String()
+		sub := &models.Submission{
+			ID:         id,
+			Language:   req.Language,
+			Code:       req.Code,
+			Status:     "PENDING",
+			IsAdmin:    true,
+		}
+		if err := db.CreateSubmission(sub); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: "Database Error"})
+		}
+		payload := models.JobPayload{
+			SubmissionID:     id,
+			Language:         req.Language,
+			Code:             req.Code,
+			IsInputGenerator: true,
+		}
+		if err := q.Enqueue(payload); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: "Queue Error"})
+		}
+		return c.JSON(fiber.Map{"submission_id": id})
+	})
+
 	router.Post("/admin/generate", func(c *fiber.Ctx) error {
 		var req models.GenerateRequest
 		if err := c.BodyParser(&req); err != nil {
@@ -79,6 +107,7 @@ func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, 
 			Code:       req.Code,
 			QuestionID: req.QuestionID,
 			Status:     "PENDING",
+			IsAdmin:    true,
 		}
 		if err := db.CreateSubmission(sub); err != nil {
 			return c.Status(500).JSON(models.ErrorModel{Error: "Database Error"})
@@ -106,6 +135,14 @@ func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, 
 			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
 		}
 		return c.JSON(subs)
+	})
+
+	router.Get("/submissions/:id", func(c *fiber.Ctx) error {
+		sub, err := db.GetSubmission(c.Params("id"))
+		if err != nil {
+			return c.Status(404).JSON(models.ErrorModel{Error: "Not found"})
+		}
+		return c.JSON(sub)
 	})
 
 	router.Post("/exec", func(c *fiber.Ctx) error {

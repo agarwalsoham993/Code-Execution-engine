@@ -48,6 +48,7 @@ func NewPostgresDB(dsn string) (*PostgresDB, error) {
 	}
 
 	alterQuery := `
+		ALTER TABLE submissions ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
 		ALTER TABLE test_questions ADD COLUMN IF NOT EXISTS solution_code TEXT DEFAULT '';
 		ALTER TABLE test_questions ADD COLUMN IF NOT EXISTS solution_lang TEXT DEFAULT '';
 		ALTER TABLE test_questions ADD COLUMN IF NOT EXISTS generator_config TEXT DEFAULT '{}';
@@ -60,9 +61,9 @@ func NewPostgresDB(dsn string) (*PostgresDB, error) {
 }
 
 func (p *PostgresDB) CreateSubmission(sub *models.Submission) error {
-	query := `INSERT INTO submissions (id, language, code, question_id, status, stdout, stderr, exec_time_ms, passed_count, total_count, created_at) 
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
-	_, err := p.db.Exec(query, sub.ID, sub.Language, sub.Code, sub.QuestionID, sub.Status, "", "", 0, 0, 0, time.Now())
+	query := `INSERT INTO submissions (id, language, code, question_id, status, stdout, stderr, exec_time_ms, passed_count, total_count, created_at, is_admin) 
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	_, err := p.db.Exec(query, sub.ID, sub.Language, sub.Code, sub.QuestionID, sub.Status, "", "", 0, 0, 0, time.Now(), sub.IsAdmin)
 	return err
 }
 
@@ -76,18 +77,20 @@ func (p *PostgresDB) GetSubmission(id string) (*models.Submission, error) {
 	s := &models.Submission{}
 	query := `SELECT id, language, code, COALESCE(question_id,''), status, 
               COALESCE(stdout, ''), COALESCE(stderr, ''), COALESCE(exec_time_ms, 0),
-              COALESCE(passed_count, 0), COALESCE(total_count, 0), created_at 
+              COALESCE(passed_count, 0), COALESCE(total_count, 0), created_at, COALESCE(is_admin, false) 
               FROM submissions WHERE id=$1`
 	err := p.db.QueryRow(query, id).
-		Scan(&s.ID, &s.Language, &s.Code, &s.QuestionID, &s.Status, &s.StdOut, &s.StdErr, &s.ExecTimeMS, &s.PassedCount, &s.TotalCount, &s.CreatedAt)
+		Scan(&s.ID, &s.Language, &s.Code, &s.QuestionID, &s.Status, &s.StdOut, &s.StdErr, &s.ExecTimeMS, &s.PassedCount, &s.TotalCount, &s.CreatedAt, &s.IsAdmin)
 	return s, err
 }
 
 func (p *PostgresDB) GetAllSubmissions() ([]models.Submission, error) {
 	query := `SELECT id, language, code, COALESCE(question_id,''), status, 
               COALESCE(stdout, ''), COALESCE(stderr, ''), COALESCE(exec_time_ms, 0),
-              COALESCE(passed_count, 0), COALESCE(total_count, 0), created_at 
-              FROM submissions ORDER BY created_at DESC LIMIT 50`
+              COALESCE(passed_count, 0), COALESCE(total_count, 0), created_at, COALESCE(is_admin, false) 
+              FROM submissions 
+              WHERE is_admin = false OR is_admin IS NULL
+              ORDER BY created_at DESC LIMIT 50`
 	rows, err := p.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -97,7 +100,7 @@ func (p *PostgresDB) GetAllSubmissions() ([]models.Submission, error) {
 	var subs []models.Submission
 	for rows.Next() {
 		var s models.Submission
-		if err := rows.Scan(&s.ID, &s.Language, &s.Code, &s.QuestionID, &s.Status, &s.StdOut, &s.StdErr, &s.ExecTimeMS, &s.PassedCount, &s.TotalCount, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Language, &s.Code, &s.QuestionID, &s.Status, &s.StdOut, &s.StdErr, &s.ExecTimeMS, &s.PassedCount, &s.TotalCount, &s.CreatedAt, &s.IsAdmin); err != nil {
 			return nil, err
 		}
 		subs = append(subs, s)

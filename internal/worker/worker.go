@@ -109,6 +109,16 @@ func (w *Worker) Start() {
 		}
 
 		if status == "SUCCESS" {
+			if payload.IsInputGenerator {
+				var rawInputs []string
+				if jsonErr := json.Unmarshal([]byte(output), &rawInputs); jsonErr == nil {
+					status = "SUCCESS"
+					passedCount = len(rawInputs)
+				} else {
+					status = "ERROR"
+					stderr = "Failed to parse generated inputs as JSON array of strings.\nOutput was:\n" + output
+				}
+			} else {
 				var genResult struct {
 					Generated []models.TestCase `json:"generated"`
 				}
@@ -135,6 +145,7 @@ func (w *Worker) Start() {
 						stderr += "\nJudge Error: Output format invalid (Output limit might be exceeded)."
 					}
 				}
+			}
 		}
 
 		w.db.UpdateResult(payload.SubmissionID, status, output, stderr, int(execTime.Milliseconds()), passedCount, totalTestCases)
@@ -145,6 +156,19 @@ func (w *Worker) Start() {
 func (w *Worker) generateFiles(payload *models.JobPayload) (map[string]string, int, error) {
 	files := make(map[string]string)
 	
+	if payload.IsInputGenerator {
+		switch payload.Language {
+		case "python3", "python":
+			files["driver.py"] = payload.Code
+		case "node", "javascript":
+			files["driver.js"] = payload.Code
+		default:
+			files["main.code"] = payload.Code
+			return nil, 0, fmt.Errorf("language %s not fully supported for input generation", payload.Language)
+		}
+		return files, 0, nil
+	}
+
 	var testsJSON []byte
 	var tests []models.TestCase
 

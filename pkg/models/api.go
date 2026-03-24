@@ -51,11 +51,12 @@ type Question struct {
 }
 
 type JobPayload struct {									// transfered to REDIS
-	SubmissionID string   `json:"submission_id"`
-	Language     string   `json:"language"`
-	Code         string   `json:"code"`
-	QuestionID   string   `json:"question_id"`
-	AdminInputs  []string `json:"admin_inputs,omitempty"`
+	SubmissionID     string   `json:"submission_id"`
+	Language         string   `json:"language"`
+	Code             string   `json:"code"`
+	QuestionID       string   `json:"question_id"`
+	AdminInputs      []string `json:"admin_inputs,omitempty"`
+	IsInputGenerator bool     `json:"is_input_generator,omitempty"`
 }
 
 type Submission struct {									// transfered to Database
@@ -71,4 +72,5 @@ type Submission struct {									// transfered to Database
 	PassedCount int          `json:"passed_count"`
 	TotalCount  int          `json:"total_count"`
 	CreatedAt   time.Time    `json:"created_at"`
+	IsAdmin     bool         `json:"is_admin"`
 }
