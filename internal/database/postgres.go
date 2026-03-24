@@ -3,6 +3,7 @@ package database
 import (
 	"code-runner/pkg/models"
 	"database/sql"
+	"encoding/json"
 	_ "github.com/lib/pq"
 	"time"
 )
@@ -34,8 +35,24 @@ func NewPostgresDB(dsn string) (*PostgresDB, error) {
 		passed_count INT DEFAULT 0,
 		total_count INT DEFAULT 0,
 		created_at TIMESTAMP
+	);
+	
+	CREATE TABLE IF NOT EXISTS test_questions (
+		id TEXT PRIMARY KEY,
+		title TEXT,
+		description TEXT,
+		test_cases JSONB DEFAULT '[]'
 	);`
 	if _, err := db.Exec(query); err != nil {
+		return nil, err
+	}
+
+	alterQuery := `
+		ALTER TABLE test_questions ADD COLUMN IF NOT EXISTS solution_code TEXT DEFAULT '';
+		ALTER TABLE test_questions ADD COLUMN IF NOT EXISTS solution_lang TEXT DEFAULT '';
+		ALTER TABLE test_questions ADD COLUMN IF NOT EXISTS generator_config TEXT DEFAULT '{}';
+	`
+	if _, err := db.Exec(alterQuery); err != nil {
 		return nil, err
 	}
 
@@ -86,4 +103,61 @@ func (p *PostgresDB) GetAllSubmissions() ([]models.Submission, error) {
 		subs = append(subs, s)
 	}
 	return subs, nil
+}
+
+func (p *PostgresDB) CreateQuestion(q *models.Question) error {
+	casesJSON, _ := json.Marshal(q.TestCases)
+	query := `INSERT INTO test_questions (id, title, description, test_cases, solution_code, solution_lang, generator_config) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	_, err := p.db.Exec(query, q.ID, q.Title, q.Description, casesJSON, q.SolutionCode, q.SolutionLang, q.GeneratorConfig)
+	return err
+}
+
+func (p *PostgresDB) UpdateQuestion(q *models.Question) error {
+	casesJSON, _ := json.Marshal(q.TestCases)
+	query := `UPDATE test_questions SET title=$1, description=$2, test_cases=$3, solution_code=$4, solution_lang=$5, generator_config=$6 WHERE id=$7`
+	_, err := p.db.Exec(query, q.Title, q.Description, casesJSON, q.SolutionCode, q.SolutionLang, q.GeneratorConfig, q.ID)
+	return err
+}
+
+func (p *PostgresDB) DeleteQuestion(id string) error {
+	query := `DELETE FROM test_questions WHERE id=$1`
+	_, err := p.db.Exec(query, id)
+	return err
+}
+
+func (p *PostgresDB) GetQuestion(id string) (*models.Question, error) {
+	q := &models.Question{}
+	var casesJSON []byte
+	query := `SELECT id, title, description, test_cases, COALESCE(solution_code, ''), COALESCE(solution_lang, ''), COALESCE(generator_config, '{}') FROM test_questions WHERE id=$1`
+	err := p.db.QueryRow(query, id).Scan(&q.ID, &q.Title, &q.Description, &casesJSON, &q.SolutionCode, &q.SolutionLang, &q.GeneratorConfig)
+	if err != nil {
+		return nil, err
+	}
+	if len(casesJSON) > 0 {
+		json.Unmarshal(casesJSON, &q.TestCases)
+	}
+	return q, nil
+}
+
+func (p *PostgresDB) GetAllQuestions() ([]models.Question, error) {
+	query := `SELECT id, title, description, test_cases, COALESCE(solution_code, ''), COALESCE(solution_lang, ''), COALESCE(generator_config, '{}') FROM test_questions ORDER BY id ASC`
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var questions []models.Question
+	for rows.Next() {
+		var q models.Question
+		var casesJSON []byte
+		if err := rows.Scan(&q.ID, &q.Title, &q.Description, &casesJSON, &q.SolutionCode, &q.SolutionLang, &q.GeneratorConfig); err != nil {
+			return nil, err
+		}
+		if len(casesJSON) > 0 {
+			json.Unmarshal(casesJSON, &q.TestCases)
+		}
+		questions = append(questions, q)
+	}
+	return questions, nil
 }

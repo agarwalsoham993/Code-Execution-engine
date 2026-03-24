@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: mysecretpassword
       POSTGRES_DB: runner
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -17,7 +17,7 @@ services:
     image: redis:alpine
     container_name: runner_queue
     ports:
-      - "6379:6379"
+      - "6380:6379"
 
 volumes:
   postgres_data:

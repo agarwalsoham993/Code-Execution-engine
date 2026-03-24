@@ -9,8 +9,6 @@ import (
 	"code-runner/pkg/models"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 	"github.com/redis/go-redis/v9"
@@ -111,24 +109,32 @@ func (w *Worker) Start() {
 		}
 
 		if status == "SUCCESS" {
-				var results []models.TestResult
-				if jsonErr := json.Unmarshal([]byte(output), &results); jsonErr == nil {
-					if len(results) == 0 {
-						status = "SUCCESS"
-						passedCount = totalTestCases
-					} else {
-						failure := results[0]
-						status = "FAILURE"
-						if idVal, err := strconv.Atoi(failure.TestCaseID); err == nil {
-							passedCount = idVal - 1
-						}
-						stderr = fmt.Sprintf("Failed Case %s:\n\nExpected Output:\n%s\n\nActual Output:\n%s", 
-							failure.TestCaseID, failure.Expected, failure.Actual)
-					}
+				var genResult struct {
+					Generated []models.TestCase `json:"generated"`
+				}
+				if jsonErr := json.Unmarshal([]byte(output), &genResult); jsonErr == nil && len(genResult.Generated) > 0 {
+					status = "SUCCESS"
+					passedCount = totalTestCases
 				} else {
-					status = "ERROR"
-				stderr += "\nJudge Error: Output format invalid (Output limit might be exceeded)."
-			}
+					var results []models.TestResult
+					if jsonErr := json.Unmarshal([]byte(output), &results); jsonErr == nil {
+						if len(results) == 0 {
+							status = "SUCCESS"
+							passedCount = totalTestCases
+						} else {
+							failure := results[0]
+							status = "FAILURE"
+							if idVal, err := strconv.Atoi(failure.TestCaseID); err == nil {
+								passedCount = idVal - 1
+							}
+							stderr = fmt.Sprintf("Failed Case %s:\n\nExpected Output:\n%s\n\nActual Output:\n%s", 
+								failure.TestCaseID, failure.Expected, failure.Actual)
+						}
+					} else {
+						status = "ERROR"
+						stderr += "\nJudge Error: Output format invalid (Output limit might be exceeded)."
+					}
+				}
 		}
 
 		w.db.UpdateResult(payload.SubmissionID, status, output, stderr, int(execTime.Milliseconds()), passedCount, totalTestCases)
@@ -140,14 +146,26 @@ func (w *Worker) generateFiles(payload *models.JobPayload) (map[string]string, i
 	files := make(map[string]string)
 	
 	var testsJSON []byte
-	var err error
 	var tests []models.TestCase
 
-	if payload.QuestionID != "" {
-		testPath := filepath.Join("Questions", payload.QuestionID, "tests.json")
-		testsJSON, err = os.ReadFile(testPath)
+	if len(payload.AdminInputs) > 0 {
+		tests = make([]models.TestCase, len(payload.AdminInputs))
+		for i, inp := range payload.AdminInputs {
+			tests[i] = models.TestCase{
+				ID:             fmt.Sprintf("%d", i+1),
+				Input:          inp,
+				ExpectedOutput: "__GENERATE__",
+			}
+		}
+		testsJSON, _ = json.Marshal(tests)
+	} else if payload.QuestionID != "" {
+		q, err := w.db.GetQuestion(payload.QuestionID)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to load tests for question %s: %v", payload.QuestionID, err)
+		}
+		testsJSON, err = json.Marshal(q.TestCases)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to encode tests for question %s: %v", payload.QuestionID, err)
 		}
 	} else {
 		defaultTests := []models.TestCase{{ID: "1", Input: "test", ExpectedOutput: "test"}}
@@ -191,9 +209,11 @@ except Exception:
     pass
 
 def run():
-    failed_result = None
     try:
         with open("tests.json") as f: tests = json.load(f)
+        results = []
+        is_gen = len(tests) > 0 and tests[0].get("expected_output") == "__GENERATE__"
+        failed_result = None
         for t in tests:
             res = {"id": t["id"], "status": "FAILED", "expected": t["expected_output"], "actual": ""}
             try:
@@ -203,15 +223,20 @@ def run():
                 except: pass
                 val = solve(inp)
                 actual = str(val)
+                if is_gen:
+                    results.append({"input": str(t["input"]), "expected_output": actual})
+                    continue
                 res["actual"] = actual
                 if actual.strip() == t["expected_output"].strip(): res["status"] = "PASSED"
             except Exception as e:
                 res["status"] = "ERROR"
                 res["actual"] = str(e)
-            if res["status"] != "PASSED":
+            if not is_gen and res["status"] != "PASSED":
                 failed_result = res
                 break
-        if failed_result: print(json.dumps([failed_result]))
+        
+        if is_gen: print(json.dumps({"generated": results}))
+        elif failed_result: print(json.dumps([failed_result]))
         else: print(json.dumps([]))
     except Exception as e:
         print(json.dumps([{"id": "0", "status": "ERROR", "actual": str(e), "expected": ""}]))
@@ -228,6 +253,8 @@ try {
 try {
     const tests = JSON.parse(fs.readFileSync('tests.json', 'utf8'));
     let failedResult = null;
+    let isGen = tests.length > 0 && tests[0].expected_output === "__GENERATE__";
+    let results = [];
     for (const t of tests) {
         const res = { id: t.id, status: "FAILED", expected: t.expected_output, actual: "" };
         try {
@@ -235,11 +262,16 @@ try {
             if(!isNaN(inp)) inp = Number(inp);
             const val = solve(inp);
             res.actual = String(val);
+            if (isGen) {
+                results.push({input: String(t.input), expected_output: res.actual});
+                continue;
+            }
             if (res.actual.trim() === t.expected_output.trim()) res.status = "PASSED";
         } catch (e) { res.status = "ERROR"; res.actual = e.message; }
-        if (res.status !== "PASSED") { failedResult = res; break; }
+        if (!isGen && res.status !== "PASSED") { failedResult = res; break; }
     }
-    if (failedResult) console.log(JSON.stringify([failedResult]));
+    if (isGen) console.log(JSON.stringify({generated: results}));
+    else if (failedResult) console.log(JSON.stringify([failedResult]));
     else console.log(JSON.stringify([])); 
 } catch (e) { console.log(JSON.stringify([{id: "0", status: "ERROR", actual: e.message, expected: ""}])); }
 `

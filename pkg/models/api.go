@@ -23,6 +23,13 @@ type ExecutionRequest struct {
 	Environment map[string]string `json:"environment"`
 }
 
+type GenerateRequest struct {
+	Language    string   `json:"language"`
+	Code        string   `json:"code"`
+	QuestionID  string   `json:"question_id"`
+	AdminInputs []string `json:"inputs"`
+}
+
 type ExecutionResponse struct {
 	SubmissionID string       `json:"submission_id"`
 	Status       string       `json:"status"`
@@ -34,16 +41,21 @@ type ErrorModel struct {
 }
 
 type Question struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	ID              string     `json:"id"`
+	Title           string     `json:"title"`
+	Description     string     `json:"description"`
+	TestCases       []TestCase `json:"test_cases"`
+	SolutionCode    string     `json:"solution_code,omitempty"`
+	SolutionLang    string     `json:"solution_lang,omitempty"`
+	GeneratorConfig string     `json:"generator_config,omitempty"`
 }
 
 type JobPayload struct {									// transfered to REDIS
-	SubmissionID string `json:"submission_id"`
-	Language     string `json:"language"`
-	Code         string `json:"code"`
-	QuestionID   string `json:"question_id"`
+	SubmissionID string   `json:"submission_id"`
+	Language     string   `json:"language"`
+	Code         string   `json:"code"`
+	QuestionID   string   `json:"question_id"`
+	AdminInputs  []string `json:"admin_inputs,omitempty"`
 }
 
 type Submission struct {									// transfered to Database

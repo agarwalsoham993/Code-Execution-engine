@@ -5,12 +5,10 @@ import (
 	"code-runner/internal/database"
 	"code-runner/internal/queue"
 	"code-runner/internal/spec"
+	"code-runner/internal/util"
 	"code-runner/pkg/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/xid"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, q *queue.RedisQueue, db *database.PostgresDB) {
@@ -20,46 +18,87 @@ func Setup(router fiber.Router, cfg *config.EnvProvider, sp *spec.BaseProvider, 
 	})
 
 	router.Get("/questions", func(c *fiber.Ctx) error {
-		entries, err := os.ReadDir("Questions")
+		questions, err := db.GetAllQuestions()
 		if err != nil {
-			return c.JSON([]models.Question{})
-		}
-		var questions []models.Question
-		for _, e := range entries {
-			if e.IsDir() {
-				title := "Unknown"
-				data, _ := os.ReadFile(filepath.Join("Questions", e.Name(), "question.txt"))
-				lines := strings.Split(string(data), "\n")
-				if len(lines) > 0 {
-					title = lines[0]
-				}
-				questions = append(questions, models.Question{ID: e.Name(), Title: title})
-			}
+			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
 		}
 		return c.JSON(questions)
 	})
 
 	router.Get("/questions/:id", func(c *fiber.Ctx) error {
 		id := c.Params("id")
-		path := filepath.Join("Questions", id, "question.txt")
-		data, err := os.ReadFile(path)
+		q, err := db.GetQuestion(id)
 		if err != nil {
 			return c.Status(404).JSON(models.ErrorModel{Error: "Question not found"})
 		}
-		
-		content := string(data)
-		parts := strings.SplitN(content, "\n", 2)
-		title := parts[0]
-		desc := ""
-		if len(parts) > 1 { desc = parts[1] }
-
-		return c.JSON(models.Question{
-			ID:          id,
-			Title:       title,
-			Description: desc,
-		})
+		return c.JSON(q)
 	})
 
+	router.Post("/admin/questions", func(c *fiber.Ctx) error {
+		var q models.Question
+		if err := c.BodyParser(&q); err != nil {
+			return c.Status(400).JSON(models.ErrorModel{Error: "Invalid JSON"})
+		}
+		if q.ID == "" {
+			q.ID = xid.New().String()
+		}
+		if err := db.CreateQuestion(&q); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
+		}
+		return c.JSON(q)
+	})
+
+	router.Put("/admin/questions/:id", func(c *fiber.Ctx) error {
+		var q models.Question
+		if err := c.BodyParser(&q); err != nil {
+			return c.Status(400).JSON(models.ErrorModel{Error: "Invalid JSON"})
+		}
+		q.ID = c.Params("id")
+		if err := db.UpdateQuestion(&q); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
+		}
+		return c.JSON(q)
+	})
+
+	router.Delete("/admin/questions/:id", func(c *fiber.Ctx) error {
+		if err := db.DeleteQuestion(c.Params("id")); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: err.Error()})
+		}
+		return c.JSON(fiber.Map{"success": true})
+	})
+
+	router.Post("/admin/generate", func(c *fiber.Ctx) error {
+		var req models.GenerateRequest
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(400).JSON(models.ErrorModel{Error: "Invalid JSON"})
+		}
+		id := xid.New().String()
+		sub := &models.Submission{
+			ID:         id,
+			Language:   req.Language,
+			Code:       req.Code,
+			QuestionID: req.QuestionID,
+			Status:     "PENDING",
+		}
+		if err := db.CreateSubmission(sub); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: "Database Error"})
+		}
+		payload := models.JobPayload{
+			SubmissionID: id,
+			Language:     req.Language,
+			Code:         req.Code,
+			QuestionID:   req.QuestionID,
+			AdminInputs:  req.AdminInputs,
+		}
+		if err := q.Enqueue(payload); err != nil {
+			return c.Status(500).JSON(models.ErrorModel{Error: "Queue Error"})
+		}
+		return c.JSON(fiber.Map{"submission_id": id})
+	})
+
+	router.Get("/admin/logs", func(c *fiber.Ctx) error {
+		return c.JSON(util.GlobalRingLogger.GetLogs())
+	})
 
 	router.Get("/submissions", func(c *fiber.Ctx) error {
 		subs, err := db.GetAllSubmissions()

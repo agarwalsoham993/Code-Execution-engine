@@ -10,6 +10,7 @@ import (
 	"code-runner/internal/sandbox/docker"
 	"code-runner/internal/spec"
 	"code-runner/internal/worker"
+	"code-runner/internal/util"
 	"github.com/joho/godotenv"
 	"github.com/zekrotja/rogu/log"
 	"os"
@@ -19,6 +20,9 @@ import (
 
 func main() {
 	godotenv.Load()
+
+	// Add in-memory logger for Admin Portal
+	log.AddWriter(util.GlobalRingLogger)
 
 	// 1. Config
 	cfg := config.NewEnvProvider("RUNNER_")
