@@ -1,6 +1,55 @@
 nohup: ignoring input
-[38;5;245m2026-03-25T00:49:26+05:30[0m [38;5;46mINFO[0m  Connected to Postgres 
-[38;5;245m2026-03-25T00:49:26+05:30[0m [38;5;46mINFO[0m  Connected to Redis 
-[38;5;245m2026-03-25T00:49:26+05:30[0m [38;5;46mINFO[0m  Starting Worker Pool (Min: 1, Max: 6) 
-[38;5;245m2026-03-25T00:49:26+05:30[0m [38;5;46mINFO[0m  Code Runner Started on port :8080. Workers: Min=1, Max=6 
-[38;5;245m2026-03-25T00:49:26+05:30[0m [38;5;46mINFO[0m  Worker started [38;5;245mworker_id=[0m1 
+[38;5;245m2026-03-25T19:15:47+05:30[0m [38;5;46mINFO[0m  Connected to Postgres 
+[38;5;245m2026-03-25T19:15:47+05:30[0m [38;5;46mINFO[0m  Connected to Redis 
+[38;5;245m2026-03-25T19:15:47+05:30[0m [38;5;46mINFO[0m  Starting Worker Pool (Min: 1, Max: 6) 
+[38;5;245m2026-03-25T19:15:47+05:30[0m [38;5;46mINFO[0m  Code Runner Started on port :8080. Workers: Min=1, Max=6 
+[38;5;245m2026-03-25T19:15:47+05:30[0m [38;5;46mINFO[0m  Worker started [38;5;245mworker_id=[0m1 
+[38;5;245m2026-03-25T19:16:02+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71ue6mmba62c9271dc0" 
+[38;5;245m2026-03-25T19:16:02+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"54e0ae2c9143050ed872722d9afb1993dea9073902ecb8a06c50fdbf3b631072" 
+[38;5;245m2026-03-25T19:16:02+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71ue6mmba62c9271dc0" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:19:53+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71ug0emba62c9271dd0" 
+[38;5;245m2026-03-25T19:19:53+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"b3f20c80351e9a650946ec47baa06e86c4284d88d2809ad1166c901fc62d255b" 
+[38;5;245m2026-03-25T19:19:54+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71ug0emba62c9271dd0" [38;5;245mstatus=[0m"FAILURE" 
+[38;5;245m2026-03-25T19:22:09+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71uh2emba62c9271de0" 
+[38;5;245m2026-03-25T19:22:09+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"26d7eab9b7d0c544ee00a2ba66f6cc84e59799536612218e01db92fd18618c97" 
+[38;5;245m2026-03-25T19:22:09+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71uh2emba62c9271de0" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:22:21+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71uh5emba62c9271df0" 
+[38;5;245m2026-03-25T19:22:21+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"b0cabb69ff9d3e3ae1ac150ca96661a9666574f21557539f1a9f516c163c2ad7" 
+[38;5;245m2026-03-25T19:22:21+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71uh5emba62c9271df0" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:22:57+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71uheemba62c9271dg0" 
+[38;5;245m2026-03-25T19:22:57+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"07d30bd93365375c3119e99981f614b6aba4b3f98991e6ed2d617f730b4bea63" 
+[38;5;245m2026-03-25T19:22:57+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71uheemba62c9271dg0" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:23:08+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71uhh6mba62c9271dh0" 
+[38;5;245m2026-03-25T19:23:08+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"5d9df4abfbb27c9fe2c68dca2f9ea5fd862b26bbdecd418648f5bfbd17eabcc4" 
+[38;5;245m2026-03-25T19:23:08+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71uhh6mba62c9271dh0" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:23:25+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71uhlemba62c9271dig" 
+[38;5;245m2026-03-25T19:23:25+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"8f366a3677cc6a046a3d0f4731e75f56a13d7f7a0726218bdae23a85406f817c" 
+[38;5;245m2026-03-25T19:23:26+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71uhlemba62c9271dig" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:30:45+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71ul3emba62c9271djg" 
+[38;5;245m2026-03-25T19:30:45+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"1c6acf936f8fb84234d12417416638355bd02a0d0fca54ebbb44d2505273a3e0" 
+[38;5;245m2026-03-25T19:30:45+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71ul3emba62c9271djg" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:32:32+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71ulu6mba62c9271dkg" 
+[38;5;245m2026-03-25T19:32:32+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"083b5c87f6975dd1e43ee913a8105f9ea100497c9e3f588446bf5021a7a0ad32" 
+[38;5;245m2026-03-25T19:32:32+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71ulu6mba62c9271dkg" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:43:37+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71ur4emba62c9271dlg" 
+[38;5;245m2026-03-25T19:43:37+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"26925b85bbb40cfbf346443914d3e0c26bf576e50e086496a29016e04390ac21" 
+[38;5;245m2026-03-25T19:43:38+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71ur4emba62c9271dlg" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:45:51+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71us5umba62c9271dmg" 
+[38;5;245m2026-03-25T19:45:51+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"70c4772480d0a12a36dd9b28654d04767074700ce339f4aaa16b2add2a80d0fd" 
+[38;5;245m2026-03-25T19:45:51+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71us5umba62c9271dmg" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:46:11+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71usaumba62c9271dng" 
+[38;5;245m2026-03-25T19:46:11+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"9c31453b4e8baab805766a32f3f45ab2475119f9cbc555088be44fb072c46760" 
+[38;5;245m2026-03-25T19:46:11+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71usaumba62c9271dng" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:47:05+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71usoemba62c9271dp0" 
+[38;5;245m2026-03-25T19:47:05+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"dc8897140a85c3afac584738e848e24a2733e6fd643dae08db019602212e3180" 
+[38;5;245m2026-03-25T19:47:06+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71usoemba62c9271dp0" [38;5;245mstatus=[0m"SUCCESS" 
+[38;5;245m2026-03-25T19:47:15+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71usqumba62c9271dq0" 
+[38;5;245m2026-03-25T19:47:15+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"3cd05b9be83b69d4a376912c3a22b32ca8cba888fa50ef6532302b9797b6651c" 
+[38;5;245m2026-03-25T19:47:16+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71usqumba62c9271dq0" [38;5;245mstatus=[0m"FAILURE" 
+[38;5;245m2026-03-25T19:47:28+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71usu6mba62c9271dr0" 
+[38;5;245m2026-03-25T19:47:28+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"d6145e309218e206a296ed869dc2488c5f02f49253d4db5d1d00c86679e1a084" 
+[38;5;245m2026-03-25T19:47:28+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71usu6mba62c9271dr0" [38;5;245mstatus=[0m"FAILURE" 
+[38;5;245m2026-03-25T19:47:38+05:30[0m [38;5;46mINFO[0m  Processing job [38;5;245mworker_id=[0m1 [38;5;245mjob_id=[0m"d71ut0mmba62c9271ds0" 
+[38;5;245m2026-03-25T19:47:38+05:30[0m [38;5;46mINFO[0m  Docker container created and started [38;5;245mContainerID=[0m"d8a0ee0606678e5726f24fc6b0c518e96b0e535ed3ddce9051f152f8b3f68cf9" 
+[38;5;245m2026-03-25T19:47:38+05:30[0m [38;5;46mINFO[0m  Job finished [38;5;245mjob_id=[0m"d71ut0mmba62c9271ds0" [38;5;245mstatus=[0m"FAILURE" 
+signal: killed

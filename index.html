@@ -245,7 +245,10 @@
 
         <!-- Admin View: Input Generator -->
         <div class="admin-section">
-            <h3 style="margin:0 0 10px 0; color:var(--accent-admin);">Input Generator</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0; color:var(--accent-admin);">Input Generator</h3>
+                <button onclick="clearPackets()" style="background:transparent; border:1px solid #552222; color:#ff5555; cursor:pointer; font-size:10px; padding:2px 8px; border-radius:4px; transition: 0.3s;" onmouseover="this.style.background='#331111'" onmouseout="this.style.background='transparent'">Clear Packets</button>
+            </div>
             <div>
                 <label>Language</label>
                 <select id="gen-lang"><option value="python3">Python</option></select>
@@ -690,7 +693,8 @@ print(json.dumps(generate_input()))
                                     out.innerHTML = `<div class="stderr">Generation Runtime Error:</div><pre style="color:#aaa">${sub.stderr}</pre>`;
                                 } else {
                                     try {
-                                        const resArr = JSON.parse(sub.stdout || "[]");
+                                        let resArrRaw = JSON.parse(sub.stdout || "[]");
+                                        let resArr = Array.isArray(resArrRaw) ? resArrRaw : (resArrRaw.generated || []);
                                         let html = `<div style="color:var(--accent-admin); font-weight:bold; margin-bottom:10px;">Generated ${resArr.length} Test Cases:</div>`;
                                         html += `<div style="max-height:150px; overflow-y:auto; border:1px solid #333; padding:10px; border-radius:4px;">`;
                                         
@@ -892,6 +896,12 @@ print(json.dumps(generate_input()))
             
             if (sub.question_id && !isAdmin) {
                 loadQuestion(sub.question_id, null, false);
+            }
+        }
+        function clearPackets() {
+            if (confirm("Clear all generated packets? This will remove all temporary inputs from the list below.")) {
+                adminInputPackets = [];
+                renderInputPackets();
             }
         }
     </script>

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 	"github.com/redis/go-redis/v9"
 	"github.com/zekrotja/rogu/log"
@@ -75,8 +76,8 @@ func (w *Worker) Start() {
 		cStdErr := make(chan []byte)
 		cStop := make(chan bool, 1)
 
-		stdOutBuf := cappedbuffer.New([]byte{}, 10*1024) 
-		stdErrBuf := cappedbuffer.New([]byte{}, 10*1024)
+		stdOutBuf := cappedbuffer.New([]byte{}, 100*1024) 
+		stdErrBuf := cappedbuffer.New([]byte{}, 20*1024)
 
 		go func() {
 			for {
@@ -119,31 +120,58 @@ func (w *Worker) Start() {
 					stderr = "Failed to parse generated inputs as JSON array of strings.\nOutput was:\n" + output
 				}
 			} else {
-				var genResult struct {
-					Generated []models.TestCase `json:"generated"`
+				jsonStr := strings.TrimSpace(output)
+				// If the full output isn't valid JSON, scan from last line backwards
+				if !json.Valid([]byte(jsonStr)) {
+					lines := strings.Split(jsonStr, "\n")
+					for i := len(lines) - 1; i >= 0; i-- {
+						line := strings.TrimSpace(lines[i])
+						if len(line) > 0 && json.Valid([]byte(line)) {
+							jsonStr = line
+							break
+						}
+					}
 				}
-				if jsonErr := json.Unmarshal([]byte(output), &genResult); jsonErr == nil && len(genResult.Generated) > 0 {
-					status = "SUCCESS"
-					passedCount = totalTestCases
-				} else {
+
+				parsed := false
+
+				// 1. Try as Admin Test Generation Result (Object with "generated" key)
+				if strings.Contains(jsonStr, "\"generated\"") {
+					var genResult struct {
+						Generated []models.TestCase `json:"generated"`
+					}
+					if err := json.Unmarshal([]byte(jsonStr), &genResult); err == nil {
+						status = "SUCCESS"
+						passedCount = totalTestCases
+						output = jsonStr
+						parsed = true
+					}
+				}
+
+				// 2. Try as Standard Solver Result (Array of TestResults)
+				if !parsed {
 					var results []models.TestResult
-					if jsonErr := json.Unmarshal([]byte(output), &results); jsonErr == nil {
-						if len(results) == 0 {
-							status = "SUCCESS"
-							passedCount = totalTestCases
-						} else {
+					if err := json.Unmarshal([]byte(jsonStr), &results); err == nil {
+						output = jsonStr
+						if len(results) > 0 {
 							failure := results[0]
 							status = "FAILURE"
 							if idVal, err := strconv.Atoi(failure.TestCaseID); err == nil {
 								passedCount = idVal - 1
 							}
-							stderr = fmt.Sprintf("Failed Case %s:\n\nExpected Output:\n%s\n\nActual Output:\n%s", 
+							stderr = fmt.Sprintf("Failed Case %s:\n\nExpected Output:\n%s\n\nActual Output:\n%s",
 								failure.TestCaseID, failure.Expected, failure.Actual)
+						} else {
+							status = "SUCCESS"
+							passedCount = totalTestCases
 						}
-					} else {
-						status = "ERROR"
-						stderr += "\nJudge Error: Output format invalid (Output limit might be exceeded)."
+						parsed = true
 					}
+				}
+
+				if !parsed {
+					status = "ERROR"
+					stderr += fmt.Sprintf("\nJudge Error: Output format invalid.\nExtracted: %s\nOriginal: %s", jsonStr, output)
 				}
 			}
 		}
@@ -238,13 +266,10 @@ def run():
         results = []
         is_gen = len(tests) > 0 and tests[0].get("expected_output") == "__GENERATE__"
         failed_result = None
-        for t in tests:
-            res = {"id": t["id"], "status": "FAILED", "expected": t["expected_output"], "actual": ""}
+        for i, t in enumerate(tests):
+            res = {"test_case_id": str(i+1), "status": "FAILED", "expected": t["expected_output"], "actual": ""}
             try:
                 inp = t["input"]
-                try: 
-                    if "." not in inp: inp = int(inp)
-                except: pass
                 val = solve(inp)
                 actual = str(val)
                 if is_gen:
@@ -253,6 +278,9 @@ def run():
                 res["actual"] = actual
                 if actual.strip() == t["expected_output"].strip(): res["status"] = "PASSED"
             except Exception as e:
+                if is_gen:
+                    results.append({"input": str(t["input"]), "expected_output": "ERROR: " + str(e)})
+                    continue
                 res["status"] = "ERROR"
                 res["actual"] = str(e)
             if not is_gen and res["status"] != "PASSED":
@@ -263,7 +291,7 @@ def run():
         elif failed_result: print(json.dumps([failed_result]))
         else: print(json.dumps([]))
     except Exception as e:
-        print(json.dumps([{"id": "0", "status": "ERROR", "actual": str(e), "expected": ""}]))
+        print(json.dumps([{"test_case_id": "0", "status": "ERROR", "actual": str(e), "expected": ""}]))
 if __name__ == "__main__": run()
 `
 
